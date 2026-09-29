@@ -18,7 +18,6 @@ export function Sidebar() {
     </aside>
   );
 }
-
 function SidebarItem({ label, icon: Icon, active = false, collapsed }: { label: string; icon: typeof Grid2X2; active?: boolean; collapsed: boolean }) {
   return <button className={`group flex w-full items-center gap-3 rounded-[10px] px-3 py-2.5 text-left text-[13px] font-medium transition ${active ? "bg-[#eaf1ff] text-[#0b5cff]" : "text-[#6d7788] hover:bg-[#f5f7fa] hover:text-[#172235]"} ${collapsed ? "justify-center" : ""}`} title={collapsed ? label : undefined} type="button"><Icon size={18} strokeWidth={active ? 2.2 : 1.8} /><span className={collapsed ? "sr-only" : ""}>{label}</span>{active && !collapsed ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#0b5cff]" /> : null}</button>;
 }

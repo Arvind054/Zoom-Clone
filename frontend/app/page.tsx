@@ -22,19 +22,19 @@ const actions = [
     label: "New Meeting",
     description: "Start an instant meeting",
     icon: Video,
-    className: "bg-[#f0643d] shadow-[0_9px_18px_rgba(240,100,61,0.2)] hover:bg-[#db512e]",
+    className: "bg-[var(--zoom-orange)] shadow-[0_8px_16px_rgba(242,109,33,0.22)] hover:bg-[var(--zoom-orange-hover)]",
   },
   {
     label: "Join",
     description: "Join with a meeting code",
     icon: Link2,
-    className: "bg-[#0b5cff] shadow-[0_9px_18px_rgba(11,92,255,0.18)] hover:bg-[#084dcc]",
+    className: "bg-[var(--zoom-blue)] shadow-[0_8px_16px_rgba(14,114,237,0.2)] hover:bg-[var(--zoom-blue-hover)]",
   },
   {
     label: "Schedule",
     description: "Plan a meeting for later",
     icon: CalendarPlus,
-    className: "bg-[#36a269] shadow-[0_9px_18px_rgba(54,162,105,0.18)] hover:bg-[#2d8c5a]",
+    className: "bg-[var(--zoom-green)] shadow-[0_8px_16px_rgba(38,133,67,0.2)] hover:bg-[var(--zoom-green-hover)]",
   },
 ];
 
@@ -113,10 +113,10 @@ export default function Home() {
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-[1380px] px-5 py-8 sm:px-8 lg:px-10 lg:py-10">
-        <div className="mb-8"><p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-[#0b5cff]">Tuesday, September 29</p><h1 className="text-[30px] font-bold tracking-[-0.04em] text-[#172235] sm:text-[36px]">Good morning, Arvind</h1><p className="mt-2 text-sm text-[#768194]">What would you like to do today?</p></div>
+      <div className="mx-auto max-w-[1380px] px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
+        <div className="mb-6 sm:mb-8"><p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--zoom-blue)]">Tuesday, September 29</p><h1 className="text-[26px] font-bold tracking-[-0.03em] text-[var(--foreground)] sm:text-[32px] lg:text-[36px]">Good morning, Arvind</h1><p className="mt-2 text-sm text-[var(--zoom-muted)]">What would you like to do today?</p></div>
 
-        <section aria-label="Meeting actions" className="grid gap-4 sm:grid-cols-3">{actions.map(({ label, description, icon: Icon, className }) => <button aria-busy={label === "New Meeting" ? creating : undefined} className={`group flex min-h-[142px] flex-col items-start justify-between rounded-2xl p-5 text-left text-white transition duration-200 hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-70 ${className}`} disabled={label === "New Meeting" && creating} key={label} onClick={label === "New Meeting" ? handleNewMeeting : label === "Join" ? () => { setActionError(null); setJoinOpen(true); } : () => { setActionError(null); setScheduleOpen(true); }} type="button"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20"><Icon size={21} strokeWidth={2} /></span><span><span className="block text-lg font-bold tracking-[-0.02em]">{label === "New Meeting" && creating ? "Starting..." : label}</span><span className="mt-1 block text-xs text-white/75">{description}</span></span></button>)}</section>
+        <section aria-label="Meeting actions" className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">{actions.map(({ label, description, icon: Icon, className }) => <button aria-busy={label === "New Meeting" ? creating : undefined} className={`group flex min-h-[128px] flex-col items-start justify-between rounded-[var(--radius-lg)] p-4 text-left text-white transition duration-200 hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-70 sm:min-h-[142px] sm:p-5 ${className}`} disabled={label === "New Meeting" && creating} key={label} onClick={label === "New Meeting" ? handleNewMeeting : label === "Join" ? () => { setActionError(null); setJoinOpen(true); } : () => { setActionError(null); setScheduleOpen(true); }} type="button"><span className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] bg-white/20 sm:h-10 sm:w-10"><Icon size={20} strokeWidth={2} /></span><span><span className="block text-base font-bold tracking-[-0.02em] sm:text-lg">{label === "New Meeting" && creating ? "Starting..." : label}</span><span className="mt-1 block text-xs text-white/80">{description}</span></span></button>)}</section>
         {actionError ? <p aria-live="polite" className="mt-3 text-xs font-medium text-[#c35449]">{actionError}</p> : null}
 
         <div className="my-10 h-px bg-[#e5eaf1]" />

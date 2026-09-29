@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
@@ -166,10 +166,11 @@ def join_meeting(
     code: str, payload: JoinMeetingRequest, db: Session = Depends(get_db)
 ) -> Participant:
     meeting = get_meeting_or_404(db, code)
+    display_name = payload.display_name.strip()
     active_participant = db.scalar(
         select(Participant).where(
             Participant.meeting_id == meeting.id,
-            Participant.display_name == payload.display_name,
+            func.lower(Participant.display_name) == display_name.lower(),
             Participant.left_at.is_(None),
         )
     )
@@ -178,7 +179,7 @@ def join_meeting(
 
     participant = Participant(
         meeting=meeting,
-        display_name=payload.display_name,
+        display_name=display_name,
         role=ParticipantRole.PARTICIPANT,
         joined_at=datetime.now(UTC).replace(tzinfo=None),
     )
@@ -197,10 +198,11 @@ def leave_meeting(
 ) -> Meeting:
     meeting = get_meeting_or_404(db, code)
     now = datetime.now(UTC).replace(tzinfo=None)
+    normalized_name = display_name.strip()
     participant = db.scalar(
         select(Participant).where(
             Participant.meeting_id == meeting.id,
-            Participant.display_name == display_name,
+            func.lower(Participant.display_name) == normalized_name.lower(),
             Participant.left_at.is_(None),
         )
     )
