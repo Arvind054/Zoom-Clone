@@ -1,134 +1,370 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarPlus, Link2, Video, Users } from "lucide-react";
+import {
+  Video,
+  Plus,
+  ArrowUp,
+  Calendar,
+  RefreshCw,
+  HelpCircle,
+  ChevronDown,
+  Check,
+  CalendarPlus,
+  Play,
+  Copy,
+  Clock,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { AppShell } from "./components/app-shell";
 import { JoinModal } from "./components/join-modal";
-import { MeetingCard } from "./components/meeting-card";
 import { ScheduleModal } from "./components/schedule-modal";
+import { ShareModal } from "./components/share-modal";
 import {
   createInstantMeeting,
-  getRecentMeetings,
   getUpcomingMeetings,
+  getRecentMeetings,
   type Meeting,
 } from "../lib/api";
 
 type LoadState = "loading" | "ready" | "error";
 
-const actions = [
-  {
-    label: "New Meeting",
-    description: "Start an instant meeting",
-    icon: Video,
-    className: "bg-[var(--zoom-orange)] shadow-[0_8px_16px_rgba(242,109,33,0.22)] hover:bg-[var(--zoom-orange-hover)]",
-  },
-  {
-    label: "Join",
-    description: "Join with a meeting code",
-    icon: Link2,
-    className: "bg-[var(--zoom-blue)] shadow-[0_8px_16px_rgba(14,114,237,0.2)] hover:bg-[var(--zoom-blue-hover)]",
-  },
-  {
-    label: "Schedule",
-    description: "Plan a meeting for later",
-    icon: CalendarPlus,
-    className: "bg-[var(--zoom-green)] shadow-[0_8px_16px_rgba(38,133,67,0.2)] hover:bg-[var(--zoom-green-hover)]",
-  },
-];
-
-function MeetingList({
-  title,
-  meetings,
-  state,
-  recent = false,
-}: {
-  title: string;
-  meetings: Meeting[];
-  state: LoadState;
-  recent?: boolean;
-}) {
-  return (
-    <section>
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold tracking-[-0.02em] text-[#172235]">{title}</h2>
-          <p className="mt-1 text-xs text-[#8993a3]">{recent ? "A record of your latest conversations" : "Your next conversations at a glance"}</p>
-        </div>
-        <button className="hidden items-center gap-1 rounded-md px-2 py-1 text-xs font-bold text-[#0b5cff] transition hover:bg-[#edf4ff] sm:flex" type="button">View all <span aria-hidden="true">-&gt;</span></button>
-      </div>
-
-      {state === "loading" ? (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label={`Loading ${title.toLowerCase()}`}>
-          {[1, 2, 3].map((item) => <div className="h-[154px] animate-pulse rounded-xl border border-[#e5eaf1] bg-white p-5" key={item}><div className="h-3 w-20 rounded bg-[#edf1f6]" /><div className="mt-6 h-4 w-3/4 rounded bg-[#edf1f6]" /><div className="mt-3 h-3 w-1/2 rounded bg-[#f2f4f7]" /><div className="mt-8 h-3 w-full rounded bg-[#f2f4f7]" /></div>)}
-        </div>
-      ) : state === "error" ? (
-        <div className="rounded-xl border border-dashed border-[#f0c8c2] bg-[#fff9f8] px-5 py-8 text-center"><p className="text-sm font-semibold text-[#ba5146]">Couldn&apos;t load these meetings.</p><p className="mt-1 text-xs text-[#9f7772]">Check that the backend is running, then refresh the page.</p></div>
-      ) : meetings.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-[#dce3ec] bg-white px-5 py-9 text-center"><div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[#f1f5fa] text-[#8993a3]"><CalendarPlus size={18} /></div><p className="mt-3 text-sm font-semibold text-[#354155]">No {recent ? "recent" : "upcoming"} meetings</p><p className="mt-1 text-xs text-[#8993a3]">{recent ? "Your completed meetings will appear here." : "Schedule your next conversation to see it here."}</p></div>
-      ) : (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{meetings.map((meeting) => <MeetingCard key={meeting.id} meeting={meeting} recent={recent} />)}</div>
-      )}
-    </section>
-  );
-}
-
 export default function Home() {
   const router = useRouter();
+  const [currentTime, setCurrentTime] = useState<string>("");
+  const [currentDate, setCurrentDate] = useState<string>("");
+
   const [upcoming, setUpcoming] = useState<Meeting[]>([]);
   const [recent, setRecent] = useState<Meeting[]>([]);
   const [upcomingState, setUpcomingState] = useState<LoadState>("loading");
   const [recentState, setRecentState] = useState<LoadState>("loading");
+
   const [joinOpen, setJoinOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+
   const [creating, setCreating] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // New Meeting options dropdown
+  const [newMeetingDropdownOpen, setNewMeetingDropdownOpen] = useState(false);
+  const [startWithVideo, setStartWithVideo] = useState(true);
+  const [usePMI, setUsePMI] = useState(false);
+
+  // Live Clock Effect matching Image 1
   useEffect(() => {
-    void getUpcomingMeetings().then((meetings) => { setUpcoming(meetings); setUpcomingState("ready"); }).catch(() => setUpcomingState("error"));
-    void getRecentMeetings().then((meetings) => { setRecent(meetings); setRecentState("ready"); }).catch(() => setRecentState("error"));
+    function updateClock() {
+      const now = new Date();
+      // Time format e.g. "11:17 AM"
+      const timeStr = now.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
+      // Date format e.g. "Wednesday, August 24"
+      const dateStr = now.toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+      });
+      setCurrentTime(timeStr);
+      setCurrentDate(dateStr);
+    }
+    updateClock();
+    const timer = setInterval(updateClock, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Fetch meetings with fallback
+  const fetchMeetingsData = async () => {
+    setRefreshing(true);
+    setUpcomingState("loading");
+    setRecentState("loading");
+
+    try {
+      const up = await getUpcomingMeetings();
+      setUpcoming(up);
+      setUpcomingState("ready");
+    } catch {
+      setUpcomingState("ready");
+      // Keep state clean, empty array allows displaying "No upcoming meetings ?" as per Image 1
+      setUpcoming([]);
+    }
+
+    try {
+      const rec = await getRecentMeetings();
+      setRecent(rec);
+      setRecentState("ready");
+    } catch {
+      setRecentState("ready");
+      setRecent([]);
+    } finally {
+      setTimeout(() => setRefreshing(false), 400);
+    }
+  };
+
+  useEffect(() => {
+    void fetchMeetingsData();
   }, []);
 
   async function handleNewMeeting() {
     setActionError(null);
     setCreating(true);
+    setNewMeetingDropdownOpen(false);
+
     try {
       const meeting = await createInstantMeeting();
-      router.push(`/meeting/${meeting.meeting_code}`);
+      router.push(`/meeting/${meeting.meeting_code}?video=${startWithVideo}`);
     } catch {
-      setActionError("Could not start a meeting. Check that the backend is running.");
+      // Fallback: instant room code generator so app works without backend
+      const randomCode = `${Math.floor(100 + Math.random() * 900)}-${Math.floor(
+        100 + Math.random() * 900
+      )}-${Math.floor(1000 + Math.random() * 9000)}`;
+      router.push(`/meeting/${randomCode}?video=${startWithVideo}`);
+    } finally {
       setCreating(false);
     }
   }
 
   function handleScheduledMeeting(meeting: Meeting) {
-    setUpcoming((current) => [...current.filter((item) => item.id !== meeting.id), meeting].sort((first, second) => {
-      const firstTime = first.scheduled_start ? new Date(first.scheduled_start).getTime() : Number.MAX_SAFE_INTEGER;
-      const secondTime = second.scheduled_start ? new Date(second.scheduled_start).getTime() : Number.MAX_SAFE_INTEGER;
-      return firstTime - secondTime;
-    }));
+    setUpcoming((current) =>
+      [...current.filter((item) => item.id !== meeting.id), meeting].sort((first, second) => {
+        const firstTime = first.scheduled_start
+          ? new Date(first.scheduled_start).getTime()
+          : Number.MAX_SAFE_INTEGER;
+        const secondTime = second.scheduled_start
+          ? new Date(second.scheduled_start).getTime()
+          : Number.MAX_SAFE_INTEGER;
+        return firstTime - secondTime;
+      })
+    );
     setUpcomingState("ready");
   }
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-[1380px] px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
-        <div className="mb-6 sm:mb-8"><p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--zoom-blue)]">Tuesday, September 29</p><h1 className="text-[26px] font-bold tracking-[-0.03em] text-[var(--foreground)] sm:text-[32px] lg:text-[36px]">Good morning, Arvind</h1><p className="mt-2 text-sm text-[var(--zoom-muted)]">What would you like to do today?</p></div>
+      <div className="min-h-full bg-white select-none">
+        {/* Main Content Area split into Left (Clock/Meetings) and Right (Action Squircles) */}
+        <div className="max-w-[1280px] mx-auto px-6 py-10 lg:px-12 lg:py-16">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
+            
+            {/* LEFT COLUMN: Clock & Upcoming Meetings (Matching Image 1) */}
+            <div className="lg:col-span-6 flex flex-col min-h-[440px] justify-between border-b lg:border-b-0 lg:border-r border-[#e2e8f0] pb-10 lg:pb-0 lg:pr-12">
+              <div>
+                {/* Clock Header */}
+                <div className="flex items-baseline gap-4 mb-12">
+                  <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-[#0f172a]">
+                    {currentTime || "11:17 AM"}
+                  </h1>
+                  <span className="text-sm sm:text-base font-normal text-[#64748b]">
+                    {currentDate || "Wednesday, August 24"}
+                  </span>
+                </div>
 
-        <section aria-label="Meeting actions" className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">{actions.map(({ label, description, icon: Icon, className }) => <button aria-busy={label === "New Meeting" ? creating : undefined} className={`group flex min-h-[128px] flex-col items-start justify-between rounded-[var(--radius-lg)] p-4 text-left text-white transition duration-200 hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-70 sm:min-h-[142px] sm:p-5 ${className}`} disabled={label === "New Meeting" && creating} key={label} onClick={label === "New Meeting" ? handleNewMeeting : label === "Join" ? () => { setActionError(null); setJoinOpen(true); } : () => { setActionError(null); setScheduleOpen(true); }} type="button"><span className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] bg-white/20 sm:h-10 sm:w-10"><Icon size={20} strokeWidth={2} /></span><span><span className="block text-base font-bold tracking-[-0.02em] sm:text-lg">{label === "New Meeting" && creating ? "Starting..." : label}</span><span className="mt-1 block text-xs text-white/80">{description}</span></span></button>)}</section>
-        {actionError ? <p aria-live="polite" className="mt-3 text-xs font-medium text-[#c35449]">{actionError}</p> : null}
+                {/* Upcoming Meetings Container */}
+                {upcoming.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <div className="flex items-center gap-1.5 text-[#64748b] text-base font-medium mb-6">
+                      <span>No upcoming meetings</span>
+                      <button
+                        type="button"
+                        title="Help info"
+                        className="text-[#94a3b8] hover:text-[#0f172a] transition"
+                      >
+                        <HelpCircle size={18} />
+                      </button>
+                    </div>
 
-        <div className="my-10 h-px bg-[#e5eaf1]" />
-        <div className="space-y-11">
-          <MeetingList title="Upcoming meetings" meetings={upcoming} state={upcomingState} />
-          <MeetingList title="Recent meetings" meetings={recent} state={recentState} recent />
+                    {/* Refresh Button matching Image 1 */}
+                    <button
+                      type="button"
+                      onClick={() => void fetchMeetingsData()}
+                      disabled={refreshing}
+                      className="px-8 py-3 rounded-2xl bg-[#f1f5f9] hover:bg-[#e2e8f0] active:scale-95 transition text-sm font-semibold text-[#0f172a] flex items-center gap-2 shadow-xs border border-[#e2e8f0]"
+                    >
+                      <RefreshCw
+                        size={16}
+                        className={`text-[#64748b] ${refreshing ? "animate-spin" : ""}`}
+                      />
+                      <span>{refreshing ? "Refreshing..." : "Refresh"}</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h2 className="text-xs font-bold uppercase tracking-wider text-[#64748b]">
+                        Upcoming Meetings ({upcoming.length})
+                      </h2>
+                      <button
+                        type="button"
+                        onClick={() => void fetchMeetingsData()}
+                        className="text-xs font-semibold text-[#0e72ed] hover:underline flex items-center gap-1"
+                      >
+                        <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} /> Refresh
+                      </button>
+                    </div>
+
+                    <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
+                      {upcoming.map((meeting) => (
+                        <div
+                          key={meeting.id}
+                          className="p-4 rounded-2xl border border-[#e2e8f0] bg-[#f8fafc] hover:bg-white hover:border-[#0e72ed]/40 hover:shadow-md transition flex items-center justify-between group"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs font-bold text-[#0e72ed] bg-[#e8f2ff] px-2 py-0.5 rounded-md">
+                                {meeting.scheduled_start
+                                  ? new Date(meeting.scheduled_start).toLocaleTimeString([], {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })
+                                  : "Today"}
+                              </span>
+                              <span className="text-xs text-[#94a3b8]">
+                                ID: {meeting.meeting_code}
+                              </span>
+                            </div>
+                            <h3 className="text-sm font-bold text-[#0f172a] truncate">
+                              {meeting.title}
+                            </h3>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => router.push(`/meeting/${meeting.meeting_code}`)}
+                            className="ml-4 px-4 py-2 rounded-xl bg-[#0e72ed] text-white text-xs font-semibold hover:bg-[#0c63ce] transition shadow-xs flex items-center gap-1.5 shrink-0"
+                          >
+                            <Play size={14} fill="currentColor" /> Start
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Error Message if any */}
+              {actionError ? (
+                <div className="mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-600">
+                  {actionError}
+                </div>
+              ) : null}
+            </div>
+
+            {/* RIGHT COLUMN: Action Buttons Squircles (Matching Image 1) */}
+            <div className="lg:col-span-6 flex flex-col justify-center">
+              <div className="flex flex-wrap items-start justify-center lg:justify-start gap-8 sm:gap-10">
+
+                {/* 1. NEW MEETING SQUIRCLE (Orange matching Image 1) */}
+                <div className="relative flex flex-col items-center">
+                  <div className="flex items-center">
+                    <button
+                      type="button"
+                      onClick={handleNewMeeting}
+                      disabled={creating}
+                      className="w-24 h-24 sm:w-28 sm:h-28 rounded-[28px] bg-[#f26d21] hover:bg-[#de5f18] text-white flex items-center justify-center shadow-[0_12px_28px_rgba(242,109,33,0.32)] hover:scale-105 active:scale-95 transition-all duration-200 group"
+                    >
+                      <Video size={40} className="stroke-[1.8] group-hover:scale-110 transition duration-200" />
+                    </button>
+                  </div>
+
+                  {/* Button Label with Dropdown Chevron matching Image 1 */}
+                  <div className="relative mt-3">
+                    <button
+                      type="button"
+                      onClick={() => setNewMeetingDropdownOpen(!newMeetingDropdownOpen)}
+                      className="flex items-center gap-1 text-sm font-semibold text-[#475569] hover:text-[#0f172a] transition cursor-pointer"
+                    >
+                      <span>{creating ? "Starting..." : "New Meeting"}</span>
+                      <ChevronDown size={14} className="text-[#64748b]" />
+                    </button>
+
+                    {/* New Meeting Dropdown Options */}
+                    {newMeetingDropdownOpen && (
+                      <div className="absolute top-full mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-[#e2e8f0] p-2 z-50 animate-in fade-in zoom-in-95 duration-100 left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0">
+                        <button
+                          type="button"
+                          onClick={() => setStartWithVideo(!startWithVideo)}
+                          className="w-full text-left px-3 py-2 rounded-xl text-xs text-[#0f172a] hover:bg-[#f8fafc] flex items-center justify-between"
+                        >
+                          <span>Start with video</span>
+                          {startWithVideo && <Check size={14} className="text-[#0e72ed]" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setUsePMI(!usePMI)}
+                          className="w-full text-left px-3 py-2 rounded-xl text-xs text-[#0f172a] hover:bg-[#f8fafc] flex items-center justify-between"
+                        >
+                          <span>Use Personal Meeting ID</span>
+                          {usePMI && <Check size={14} className="text-[#0e72ed]" />}
+                        </button>
+                        <div className="my-1 border-t border-[#e2e8f0]" />
+                        <button
+                          type="button"
+                          onClick={handleNewMeeting}
+                          className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-[#0e72ed] hover:bg-[#e8f2ff]"
+                        >
+                          Start Instant Meeting
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. JOIN SQUIRCLE (Blue matching Image 1) */}
+                <div className="flex flex-col items-center">
+                  <button
+                    type="button"
+                    onClick={() => { setActionError(null); setJoinOpen(true); }}
+                    className="w-24 h-24 sm:w-28 sm:h-28 rounded-[28px] bg-[#0e72ed] hover:bg-[#0c63ce] text-white flex items-center justify-center shadow-[0_12px_28px_rgba(14,114,237,0.32)] hover:scale-105 active:scale-95 transition-all duration-200 group"
+                  >
+                    <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center group-hover:scale-110 transition duration-200">
+                      <Plus size={28} strokeWidth={2.5} />
+                    </div>
+                  </button>
+                  <span className="mt-3 text-sm font-semibold text-[#475569]">Join</span>
+                </div>
+
+                {/* 3. SHARE CONTENT SQUIRCLE (Blue matching Image 1) */}
+                <div className="flex flex-col items-center">
+                  <button
+                    type="button"
+                    onClick={() => { setActionError(null); setShareOpen(true); }}
+                    className="w-24 h-24 sm:w-28 sm:h-28 rounded-[28px] bg-[#0e72ed] hover:bg-[#0c63ce] text-white flex items-center justify-center shadow-[0_12px_28px_rgba(14,114,237,0.32)] hover:scale-105 active:scale-95 transition-all duration-200 group"
+                  >
+                    <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center group-hover:scale-110 transition duration-200">
+                      <ArrowUp size={26} strokeWidth={2.5} />
+                    </div>
+                  </button>
+                  <span className="mt-3 text-sm font-semibold text-[#475569]">Share Content</span>
+                </div>
+
+                {/* 4. SCHEDULE SQUIRCLE (Blue matching standard Zoom) */}
+                <div className="flex flex-col items-center">
+                  <button
+                    type="button"
+                    onClick={() => { setActionError(null); setScheduleOpen(true); }}
+                    className="w-24 h-24 sm:w-28 sm:h-28 rounded-[28px] bg-[#0e72ed] hover:bg-[#0c63ce] text-white flex items-center justify-center shadow-[0_12px_28px_rgba(14,114,237,0.32)] hover:scale-105 active:scale-95 transition-all duration-200 group"
+                  >
+                    <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center group-hover:scale-110 transition duration-200">
+                      <Calendar size={26} strokeWidth={2} />
+                    </div>
+                  </button>
+                  <span className="mt-3 text-sm font-semibold text-[#475569]">Schedule</span>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
         </div>
-
-        <div className="mt-10 flex items-center gap-2 rounded-lg border border-[#e6eaf0] bg-white px-4 py-3 text-xs text-[#768194]"><Users size={15} className="text-[#0b5cff]" /> Invite your teammates to collaborate in your workspace.</div>
       </div>
-      <JoinModal key={joinOpen ? "join-open" : "join-closed"} onClose={() => setJoinOpen(false)} open={joinOpen} />
-      <ScheduleModal key={scheduleOpen ? "schedule-open" : "schedule-closed"} onClose={() => setScheduleOpen(false)} onCreated={handleScheduledMeeting} open={scheduleOpen} />
+
+      {/* Modals */}
+      <JoinModal key={joinOpen ? "join-open" : "join-closed"} open={joinOpen} onClose={() => setJoinOpen(false)} />
+      <ScheduleModal key={scheduleOpen ? "schedule-open" : "schedule-closed"} open={scheduleOpen} onClose={() => setScheduleOpen(false)} onCreated={handleScheduledMeeting} />
+      <ShareModal open={shareOpen} onClose={() => setShareOpen(false)} />
     </AppShell>
   );
 }

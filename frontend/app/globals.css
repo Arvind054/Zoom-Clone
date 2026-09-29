@@ -1,38 +1,80 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f6f7fb;
-  --foreground: #131619;
+  --background: #f8fafc;
+  --foreground: #0f172a;
   --zoom-blue: #0e72ed;
   --zoom-blue-hover: #0c63ce;
+  --zoom-blue-light: #e8f2ff;
   --zoom-orange: #f26d21;
   --zoom-orange-hover: #de5f18;
   --zoom-green: #268543;
   --zoom-green-hover: #1f7038;
   --zoom-red: #e8173d;
   --zoom-red-hover: #c91335;
-  --zoom-surface: #ffffff;
-  --zoom-border: #dfe3e8;
-  --zoom-muted: #6e7680;
-  --zoom-meeting-bg: #1a1a1a;
-  --zoom-meeting-bar: #232323;
-  --zoom-meeting-tile: #242424;
+  --zoom-sidebar-bg: #f8fafc;
+  --zoom-card-bg: #ffffff;
+  --zoom-border: #e2e8f0;
+  --zoom-muted: #64748b;
+  
+  --zoom-meeting-bg: #121215;
+  --zoom-meeting-bar: #1e1e22;
+  --zoom-meeting-tile: #1a1a1e;
+  
   --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
-  --shadow-card: 0 8px 24px rgba(19, 22, 25, 0.08);
-  --shadow-modal: 0 24px 64px rgba(19, 22, 25, 0.18);
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-squircle: 24px;
+  
+  --shadow-card: 0 10px 30px -5px rgba(0, 0, 0, 0.05);
+  --shadow-squircle: 0 12px 28px -6px rgba(14, 114, 237, 0.25);
+  --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.7);
+}
+
+@keyframes floatUp {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(0.8);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translateY(-80px) scale(1.2);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-160px) scale(1);
+  }
+}
+
+.animate-float-emoji {
+  animation: floatUp 2.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
 }

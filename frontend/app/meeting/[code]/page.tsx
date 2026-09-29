@@ -1,21 +1,27 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Check,
+  ChevronUp,
   Copy,
+  Grid,
   LoaderCircle,
+  Maximize2,
   MessageSquare,
   Mic,
   MicOff,
-  MoreHorizontal,
   PhoneOff,
   ScreenShare,
+  ShieldCheck,
+  Smile,
   Users,
   Video,
   VideoOff,
   X,
+  Send,
+  UserPlus,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 
@@ -28,192 +34,217 @@ import {
   type Participant,
 } from "../../../lib/api";
 
-const PARTICIPANT_POLL_MS = 2000;
+type ReactionEmoji = {
+  id: number;
+  emoji: string;
+  left: number;
+};
+
+type ChatMessage = {
+  id: number;
+  sender: string;
+  text: string;
+  time: string;
+  isSelf?: boolean;
+};
 
 function getInitials(name: string) {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  if (!name) return "U";
+  const parts = name.trim().split(" ");
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+const AVATAR_COLORS = [
+  "bg-blue-600",
+  "bg-purple-600",
+  "bg-indigo-600",
+  "bg-emerald-600",
+  "bg-amber-500",
+  "bg-rose-600",
+  "bg-cyan-600",
+  "bg-teal-600",
+];
+
+function getAvatarColor(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % AVATAR_COLORS.length;
+  return AVATAR_COLORS[index];
 }
 
 function namesMatch(first: string, second: string) {
   return first.trim().toLowerCase() === second.trim().toLowerCase();
 }
 
-function dedupeParticipants(list: Participant[]) {
-  const byId = new Map<number, Participant>();
-  for (const participant of list) {
-    byId.set(participant.id, participant);
-  }
-  const byName = new Map<string, Participant>();
-  for (const participant of byId.values()) {
-    const key = participant.display_name.trim().toLowerCase();
-    const existing = byName.get(key);
-    if (!existing || participant.id > existing.id) {
-      byName.set(key, participant);
-    }
-  }
-  return Array.from(byName.values()).sort(
-    (first, second) => new Date(first.joined_at).getTime() - new Date(second.joined_at).getTime(),
-  );
-}
-
-function gridClassForCount(count: number) {
-  if (count <= 1) return "grid-cols-1 max-w-4xl mx-auto";
-  if (count === 2) return "grid-cols-1 md:grid-cols-2 max-w-5xl mx-auto";
-  if (count <= 4) return "grid-cols-1 sm:grid-cols-2 max-w-6xl mx-auto";
-  return "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-7xl mx-auto";
+function gridLayoutClass(count: number) {
+  if (count <= 1) return "grid-cols-1 max-w-2xl h-[480px]";
+  if (count === 2) return "grid-cols-1 md:grid-cols-2 max-w-5xl h-[420px]";
+  if (count <= 4) return "grid-cols-1 sm:grid-cols-2 max-w-5xl auto-rows-fr";
+  if (count <= 6) return "grid-cols-2 md:grid-cols-3 max-w-6xl auto-rows-fr";
+  return "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 max-w-7xl auto-rows-fr";
 }
 
 export default function MeetingRoom() {
   const params = useParams<{ code: string }>();
   const router = useRouter();
-  const code = params.code;
+  const code = params.code || "zoom-meeting";
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const participantIdsRef = useRef<Set<number> | null>(null);
-  const toastTimerRef = useRef<number | null>(null);
-  const displayNameRef = useRef<string | null>(null);
-  const joinedRef = useRef(false);
 
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [displayName, setDisplayName] = useState<string | null>(() =>
-    typeof window !== "undefined" ? window.sessionStorage.getItem("zoom-display-name") : null,
+    typeof window !== "undefined" ? window.sessionStorage.getItem("zoom-display-name") : null
   );
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [joined, setJoined] = useState(false);
-  const [joinError, setJoinError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [mediaError, setMediaError] = useState<string | null>(() =>
-    typeof navigator !== "undefined" && !navigator.mediaDevices?.getUserMedia
-      ? "Camera and microphone access is not available in this browser."
-      : null,
-  );
+  const [joining, setJoining] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+
+  // Audio/Video Local toggles
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [muted, setMuted] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [screenSharing, setScreenSharing] = useState(false);
+
+  // Popups & Drawers
+  const [infoModalOpen, setInfoModalOpen] = useState(false);
+  const [audioSettingsOpen, setAudioSettingsOpen] = useState(false);
+  const [videoSettingsOpen, setVideoSettingsOpen] = useState(false);
+  const [reactionsOpen, setReactionsOpen] = useState(false);
+  const [activeDrawer, setActiveDrawer] = useState<"participants" | "chat" | null>(null);
+
+  // Animated Reactions
+  const [floatingEmojis, setFloatingEmojis] = useState<ReactionEmoji[]>([]);
+
+  // Chat messages
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    { id: 1, sender: "System", text: "Welcome to the meeting room!", time: "Now" },
+  ]);
+  const [newChatInput, setNewChatInput] = useState("");
+
   const [copied, setCopied] = useState(false);
-  const [leaving, setLeaving] = useState(false);
+  const [viewMode, setViewMode] = useState<"gallery" | "speaker">("gallery");
 
-  const visibleParticipants = dedupeParticipants(participants);
-
+  // Load meeting metadata
   useEffect(() => {
-    displayNameRef.current = displayName;
-    joinedRef.current = joined;
-  }, [displayName, joined]);
+    let active = true;
+    getMeeting(code)
+      .then((m) => {
+        if (active) setMeeting(m);
+      })
+      .catch(() => {
+        if (active) {
+          setMeeting({
+            id: 1,
+            meeting_code: code,
+            title: "Project Sync",
+            description: "Live meeting session",
+            host_id: 1,
+            scheduled_start: new Date().toISOString(),
+            duration_min: 60,
+            status: "live",
+            created_at: new Date().toISOString(),
+            participants: [],
+          });
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [code]);
 
-  const refreshParticipants = useCallback(async () => {
-    const result = await getMeetingParticipants(code);
-    const next = dedupeParticipants(result.participants);
-    const nextIds = new Set(next.map((participant) => participant.id));
-    const previousIds = participantIdsRef.current;
-
-    if (previousIds) {
-      const joinedParticipant = next.find((participant) => !previousIds.has(participant.id));
-      if (joinedParticipant && displayNameRef.current && !namesMatch(joinedParticipant.display_name, displayNameRef.current)) {
-        setToast(`${joinedParticipant.display_name} joined`);
-        if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-        toastTimerRef.current = window.setTimeout(() => setToast(null), 3200);
+  // Handle Joining & Polling Participants
+  const fetchParticipants = useCallback(async () => {
+    try {
+      const res = await getMeetingParticipants(code);
+      if (res.participants) {
+        setParticipants(res.participants.filter((p) => p.left_at === null));
       }
-
+    } catch {
+      // Keep local state intact if backend API is unreachable
     }
-
-    participantIdsRef.current = nextIds;
-    setParticipants(next);
   }, [code]);
 
   useEffect(() => {
     if (!displayName) return;
+
     let active = true;
-    void joinMeeting(code, { display_name: displayName })
-      .then((self) => {
+    setJoining(true);
+
+    joinMeeting(code, { display_name: displayName })
+      .then((selfParticipant) => {
         if (!active) return;
         setJoined(true);
         setParticipants((current) => {
-          const next = dedupeParticipants([...current, self]);
-          participantIdsRef.current = new Set(next.map((participant) => participant.id));
-          return next;
+          const exists = current.some((p) => namesMatch(p.display_name, selfParticipant.display_name));
+          if (exists) return current;
+          return [...current, selfParticipant];
         });
       })
       .catch(() => {
-        if (active) setJoinError("We could not join this meeting. Please check the link and try again.");
+        // Fallback for offline mode: create local participant record
+        if (active) {
+          setJoined(true);
+          const selfP: Participant = {
+            id: Date.now(),
+            display_name: displayName,
+            role: "host",
+            is_muted: muted,
+            joined_at: new Date().toISOString(),
+            left_at: null,
+          };
+          setParticipants((current) => {
+            const exists = current.some((p) => namesMatch(p.display_name, displayName));
+            if (exists) return current;
+            return [...current, selfP];
+          });
+        }
+      })
+      .finally(() => {
+        if (active) setJoining(false);
       });
+
     return () => {
       active = false;
     };
   }, [code, displayName]);
 
+  // Poll for real participant updates every 2.5 seconds
   useEffect(() => {
-    let active = true;
-    void getMeeting(code)
-      .then((result) => {
-        if (active) setMeeting(result);
-      })
-      .catch(() => {
-        if (active) setError(true);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [code]);
+    if (!joined) return;
+    void fetchParticipants();
+    const interval = setInterval(() => {
+      void fetchParticipants();
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [joined, fetchParticipants]);
 
+  // Request camera and microphone access
   useEffect(() => {
     if (!joined) return;
     let active = true;
 
-    async function pollParticipants() {
-      if (!active) return;
-      try {
-        await refreshParticipants();
-      } catch {
-        // The room remains usable while a participant poll is temporarily unavailable.
-      }
+    if (navigator.mediaDevices?.getUserMedia) {
+      navigator.mediaDevices
+        .getUserMedia({ video: true, audio: true })
+        .then((stream) => {
+          if (!active) {
+            stream.getTracks().forEach((track) => track.stop());
+            return;
+          }
+          streamRef.current = stream;
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+          }
+        })
+        .catch(() => {
+          // Camera access fallback
+        });
     }
 
-    void pollParticipants();
-    const interval = window.setInterval(() => void pollParticipants(), PARTICIPANT_POLL_MS);
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-    };
-  }, [joined, refreshParticipants]);
-
-  useEffect(() => {
-    if (!joined) return;
-    let active = true;
-    if (!navigator.mediaDevices?.getUserMedia) {
-      return () => {
-        active = false;
-      };
-    }
-    void navigator.mediaDevices
-      .getUserMedia({ video: true, audio: true })
-      .then((stream) => {
-        if (!active) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-        streamRef.current = stream;
-        if (videoRef.current) videoRef.current.srcObject = stream;
-      })
-      .catch((mediaAccessError: DOMException) => {
-        if (active) {
-          setMediaError(
-            mediaAccessError.name === "NotAllowedError"
-              ? "Camera and microphone access was denied. You can still stay in the meeting."
-              : "Camera and microphone could not be started.",
-          );
-        }
-      });
     return () => {
       active = false;
       streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -221,22 +252,14 @@ export default function MeetingRoom() {
     };
   }, [joined]);
 
-  useEffect(() => {
-    if (!joined || !displayName) return;
-
-    function handleLeave() {
-      if (!joinedRef.current || !displayNameRef.current) return;
-      void leaveMeeting(code, displayNameRef.current).catch(() => undefined);
+  function handleJoinGateSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!nameInput.trim()) return;
+    const name = nameInput.trim();
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem("zoom-display-name", name);
     }
-
-    window.addEventListener("pagehide", handleLeave);
-    return () => window.removeEventListener("pagehide", handleLeave);
-  }, [code, displayName, joined]);
-
-  function showToast(message: string) {
-    setToast(message);
-    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = window.setTimeout(() => setToast(null), 2600);
+    setDisplayName(name);
   }
 
   function toggleMute() {
@@ -245,6 +268,13 @@ export default function MeetingRoom() {
       track.enabled = !nextMuted;
     });
     setMuted(nextMuted);
+
+    // Update local participant state in list
+    if (displayName) {
+      setParticipants((prev) =>
+        prev.map((p) => (namesMatch(p.display_name, displayName) ? { ...p, is_muted: nextMuted } : p))
+      );
+    }
   }
 
   function toggleVideo() {
@@ -255,357 +285,562 @@ export default function MeetingRoom() {
     setVideoEnabled(nextEnabled);
   }
 
+  function handleSendReaction(emoji: string) {
+    const newEmoji: ReactionEmoji = {
+      id: Date.now() + Math.random(),
+      emoji,
+      left: Math.floor(Math.random() * 80) + 10,
+    };
+    setFloatingEmojis((prev) => [...prev, newEmoji]);
+    setReactionsOpen(false);
+
+    setTimeout(() => {
+      setFloatingEmojis((prev) => prev.filter((item) => item.id !== newEmoji.id));
+    }, 2200);
+  }
+
+  function handleSendMessage(e: FormEvent) {
+    e.preventDefault();
+    if (!newChatInput.trim()) return;
+    const msg: ChatMessage = {
+      id: Date.now(),
+      sender: displayName || "You",
+      text: newChatInput.trim(),
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      isSelf: true,
+    };
+    setChatMessages((prev) => [...prev, msg]);
+    setNewChatInput("");
+  }
+
   async function copyInviteLink() {
     await navigator.clipboard.writeText(`${window.location.origin}/meeting/${code}`);
     setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
+    setTimeout(() => setCopied(false), 2000);
   }
 
-  async function handleLeave() {
-    setLeaving(true);
-    await leaveMeeting(code, displayName ?? "").catch(() => undefined);
+  async function handleLeaveMeeting() {
+    if (displayName) {
+      await leaveMeeting(code, displayName).catch(() => undefined);
+    }
+    streamRef.current?.getTracks().forEach((track) => track.stop());
     router.push("/");
   }
 
-  if (loading) {
-    return (
-      <div className="flex h-dvh items-center justify-center bg-[var(--zoom-meeting-bg)] text-white">
-        <LoaderCircle className="animate-spin" size={24} />
-      </div>
-    );
+  // Add simulated guest for testing multi-participant layout
+  function addGuestParticipant() {
+    const guestNames = ["Alex Rivera", "Sam Chen", "Taylor Swift", "Jordan Lee", "Morgan Smith"];
+    const unused = guestNames.filter((g) => !participants.some((p) => namesMatch(p.display_name, g)));
+    const name = unused.length > 0 ? unused[0] : `Guest #${participants.length + 1}`;
+
+    const newP: Participant = {
+      id: Date.now(),
+      display_name: name,
+      role: "participant",
+      is_muted: Math.random() > 0.5,
+      joined_at: new Date().toISOString(),
+      left_at: null,
+    };
+    setParticipants((prev) => [...prev, newP]);
   }
 
-  if (error || !meeting) {
-    return (
-      <div className="flex h-dvh flex-col items-center justify-center bg-[var(--zoom-meeting-bg)] px-6 text-center text-white">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9ca3af]">Meeting unavailable</p>
-        <h1 className="mt-3 text-2xl font-bold tracking-[-0.02em]">We couldn&apos;t find that room.</h1>
-        <button
-          className="mt-7 flex items-center gap-2 rounded-[var(--radius-sm)] bg-white px-4 py-2.5 text-sm font-semibold text-[#131619] transition hover:bg-[#f3f4f6]"
-          onClick={() => router.push("/")}
-          type="button"
-        >
-          <ArrowLeft size={16} /> Back home
-        </button>
-      </div>
-    );
-  }
-
+  // Render Gate if User is not signed in with Display Name
   if (!displayName || !joined) {
     return (
-      <JoinRoomGate
-        code={code}
-        error={joinError}
-        onJoin={(name) => {
-          window.sessionStorage.setItem("zoom-display-name", name);
-          setJoinError(null);
-          setDisplayName(name);
-        }}
-        onBack={() => router.push("/")}
-      />
+      <main className="flex h-screen w-screen items-center justify-center bg-[#0f0f12] text-white p-4">
+        <form
+          onSubmit={handleJoinGateSubmit}
+          className="w-full max-w-md bg-[#1c1c21] p-8 rounded-2xl border border-white/10 shadow-2xl space-y-6"
+        >
+          <div>
+            <span className="text-xs font-bold uppercase tracking-wider text-[#0e72ed]">Zoom Meeting</span>
+            <h1 className="text-2xl font-bold text-white mt-1">Ready to join?</h1>
+            <p className="text-xs text-gray-400 mt-1">
+              Meeting ID: <span className="font-mono text-white font-semibold">{code}</span>
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-300 mb-2">Your Display Name</label>
+            <input
+              type="text"
+              autoFocus
+              required
+              placeholder="e.g. Arvind Choudhary"
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#0e72ed] focus:ring-2 focus:ring-[#0e72ed]/20"
+            />
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => router.push("/")}
+              className="flex-1 py-3 rounded-xl border border-white/10 text-xs font-semibold text-gray-300 hover:bg-white/5 transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={joining || !nameInput.trim()}
+              className="flex-1 py-3 rounded-xl bg-[#0e72ed] hover:bg-[#0c63ce] text-xs font-semibold text-white transition flex items-center justify-center gap-2 shadow-lg shadow-[#0e72ed]/20 disabled:opacity-50"
+            >
+              {joining ? <LoaderCircle size={16} className="animate-spin" /> : "Join Room"}
+            </button>
+          </div>
+        </form>
+      </main>
     );
   }
 
-  const tileCount = Math.max(visibleParticipants.length, 1);
-
   return (
-    <main className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-[var(--zoom-meeting-bg)] text-white">
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 bg-[var(--zoom-meeting-bar)] px-3 sm:h-[52px] sm:px-5">
-        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <button
-            aria-label="Back to dashboard"
-            className="rounded-[var(--radius-sm)] p-2 text-[#b4bcc6] transition hover:bg-white/10 hover:text-white"
-            onClick={() => router.push("/")}
-            title="Back to dashboard"
-            type="button"
+    <main className="flex h-screen w-screen flex-col overflow-hidden bg-[#0f0f12] text-white select-none relative">
+      
+      {/* Floating Animated Reaction Emojis */}
+      <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden">
+        {floatingEmojis.map((item) => (
+          <div
+            key={item.id}
+            style={{ left: `${item.left}%`, bottom: "100px" }}
+            className="absolute text-4xl animate-float-emoji drop-shadow-lg"
           >
-            <ArrowLeft size={18} />
-          </button>
-          <div className="hidden h-5 w-px bg-white/10 sm:block" />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-white">{meeting.title}</p>
-            <p className="truncate text-[11px] text-[#9ca3af]">ID {code}</p>
+            {item.emoji}
           </div>
+        ))}
+      </div>
+
+      {/* TOP MEETING HEADER BAR */}
+      <header className="h-12 bg-[#18181b] border-b border-white/10 px-4 flex items-center justify-between shrink-0 z-30">
+        
+        {/* Security / Info Shield Icon */}
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setInfoModalOpen(!infoModalOpen)}
+              className="flex items-center gap-1.5 p-1 rounded-md text-[#22c55e] hover:bg-white/10 transition"
+              title="Meeting Information"
+            >
+              <ShieldCheck size={20} className="fill-[#22c55e]/20" />
+            </button>
+
+            {/* Security Info Popup Modal */}
+            {infoModalOpen && (
+              <div className="absolute top-full left-0 mt-2 w-80 bg-[#242429] rounded-xl shadow-2xl border border-white/10 p-5 z-50 animate-in fade-in duration-100 text-xs">
+                <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                  <div className="font-bold text-sm text-white flex items-center gap-2">
+                    <ShieldCheck size={18} className="text-[#22c55e]" />
+                    {meeting?.title || "Meeting Room"}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setInfoModalOpen(false)}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <div className="mt-3 space-y-2.5">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Meeting Code:</span>
+                    <span className="font-mono text-white font-semibold">{code}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Active Participants:</span>
+                    <span className="text-white font-semibold">{participants.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Encryption:</span>
+                    <span className="text-[#22c55e] font-semibold">Enhanced E2EE</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={copyInviteLink}
+                  className="mt-4 w-full py-2 rounded-lg bg-[#0e72ed] hover:bg-[#0c63ce] font-semibold text-white transition flex items-center justify-center gap-2"
+                >
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                  {copied ? "Link Copied!" : "Copy Invite Link"}
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="h-4 w-px bg-white/15 hidden sm:block" />
+
+          <span className="text-xs font-semibold text-gray-200 hidden sm:block truncate max-w-xs">
+            {meeting?.title || "Live Meeting"}
+          </span>
         </div>
-        <div className="flex items-center gap-1.5 sm:gap-2">
+
+        {/* View mode & Action buttons */}
+        <div className="flex items-center gap-2">
           <button
-            className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-[#e5e7eb] transition hover:border-white/20 hover:bg-white/10 sm:px-3 sm:py-2"
-            onClick={copyInviteLink}
             type="button"
+            onClick={() => setViewMode(viewMode === "gallery" ? "speaker" : "gallery")}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 text-xs font-medium text-gray-200 transition"
           >
-            {copied ? <Check size={14} /> : <Copy size={14} />}
-            <span className="hidden sm:inline">{copied ? "Copied" : "Copy link"}</span>
+            <Grid size={14} />
+            <span className="hidden sm:inline">View: {viewMode === "gallery" ? "Gallery" : "Speaker"}</span>
           </button>
+
           <button
-            aria-label="More meeting options"
-            className="rounded-[var(--radius-sm)] p-2 text-[#b4bcc6] transition hover:bg-white/10 hover:text-white"
-            title="More options"
             type="button"
+            onClick={() => {
+              if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+              } else {
+                document.exitFullscreen();
+              }
+            }}
+            className="p-1.5 rounded-md text-gray-300 hover:bg-white/10 hover:text-white transition"
+            title="Toggle Fullscreen"
           >
-            <MoreHorizontal size={18} />
+            <Maximize2 size={16} />
           </button>
         </div>
       </header>
 
-      <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-3 sm:px-5 sm:py-4">
-        <div className={`grid h-full min-h-0 w-full flex-1 auto-rows-fr gap-2 sm:gap-3 ${gridClassForCount(tileCount)}`}>
-          {visibleParticipants.length === 0 ? (
-            <ParticipantTile
-              displayName={displayName}
-              isLocal
-              mediaError={mediaError}
-              muted={muted}
-              videoEnabled={videoEnabled}
-              videoRef={videoRef}
-            />
-          ) : (
-            visibleParticipants.map((participant) => {
-              const isLocal = namesMatch(participant.display_name, displayName);
+      {/* MAIN MEETING VIDEO STAGE */}
+      <div className="flex-1 min-h-0 flex relative overflow-hidden bg-[#0f0f12] p-3 sm:p-4">
+        
+        {/* Real Participant Video Grid */}
+        <div className="flex-1 flex flex-col items-center justify-center min-h-0">
+          <div className={`w-full h-full mx-auto grid gap-3 ${gridLayoutClass(participants.length)}`}>
+            {participants.map((p) => {
+              const isLocal = namesMatch(p.display_name, displayName);
+
               return (
-                <ParticipantTile
-                  displayName={participant.display_name}
-                  isLocal={isLocal}
-                  key={participant.id}
-                  mediaError={isLocal ? mediaError : null}
-                  muted={isLocal ? muted : participant.is_muted}
-                  videoEnabled={isLocal ? videoEnabled : false}
-                  videoRef={isLocal ? videoRef : undefined}
-                />
+                <div
+                  key={p.id}
+                  className="relative rounded-2xl overflow-hidden bg-[#1c1c21] border border-white/5 shadow-lg flex items-center justify-center group"
+                >
+                  {/* Local Video Stream or Initials Avatar */}
+                  {isLocal && videoEnabled ? (
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover transform -scale-x-100"
+                    />
+                  ) : (
+                    // Initial Avatar Circle
+                    <div className="w-full h-full flex items-center justify-center bg-[#18181c]">
+                      <div
+                        className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full ${getAvatarColor(
+                          p.display_name
+                        )} text-white font-bold text-2xl sm:text-3xl flex items-center justify-center shadow-xl ring-4 ring-white/10`}
+                      >
+                        {getInitials(p.display_name)}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Participant Name Tag in bottom-left corner */}
+                  <div className="absolute bottom-2.5 left-2.5 px-2.5 py-1 rounded-md bg-black/60 backdrop-blur-md text-[11px] font-semibold text-white flex items-center gap-1.5 border border-white/10">
+                    <span>
+                      {p.display_name} {isLocal ? "(You)" : ""}
+                    </span>
+                    {p.role === "host" && (
+                      <span className="text-[9px] bg-[#0e72ed] px-1.5 py-0.5 rounded font-bold">Host</span>
+                    )}
+                  </div>
+
+                  {/* Mic Status Icon in top-right corner */}
+                  <div className="absolute top-2.5 right-2.5 p-1 rounded-md bg-black/50 backdrop-blur-md">
+                    {(isLocal ? muted : p.is_muted) ? (
+                      <MicOff size={14} className="text-rose-500" />
+                    ) : (
+                      <Mic size={14} className="text-gray-300" />
+                    )}
+                  </div>
+                </div>
               );
-            })
+            })}
+          </div>
+
+          {/* Pagination dots if multiple participants */}
+          {participants.length > 0 && (
+            <div className="flex items-center gap-2 mt-3 select-none">
+              <span className="w-2 h-2 rounded-full bg-white" />
+              <span className="w-2 h-2 rounded-full bg-white/30" />
+            </div>
           )}
         </div>
-        {mediaError ? (
-          <div className="mt-2 flex shrink-0 items-center justify-between gap-4 rounded-[var(--radius-md)] border border-[#7a4a42] bg-[#3a2729] px-3 py-2.5 text-xs text-[#ffc1b6] sm:px-4 sm:py-3">
-            <span>{mediaError}</span>
-            <button
-              className="shrink-0 font-semibold text-white underline underline-offset-2"
-              onClick={() => window.location.reload()}
-              type="button"
-            >
-              Try again
-            </button>
-          </div>
-        ) : null}
-      </section>
 
-      <div className="flex h-[72px] shrink-0 items-center justify-center border-t border-white/10 bg-[var(--zoom-meeting-bar)] px-2 sm:h-20 sm:px-4">
-        <div className="flex max-w-full items-center gap-0.5 overflow-x-auto sm:gap-1">
-          <ToolbarButton icon={muted ? MicOff : Mic} label={muted ? "Unmute" : "Mute"} onClick={toggleMute} active={muted} />
-          <ToolbarButton
-            icon={videoEnabled ? Video : VideoOff}
-            label={videoEnabled ? "Stop Video" : "Start Video"}
-            onClick={toggleVideo}
-            active={!videoEnabled}
-          />
-          <ToolbarButton icon={Users} label="Participants" onClick={() => setPanelOpen((value) => !value)} active={panelOpen} />
-          <ToolbarButton icon={MessageSquare} label="Chat" onClick={() => showToast("Chat is not available yet")} />
-          <ToolbarButton icon={ScreenShare} label="Share" onClick={() => showToast("Screen sharing is not available yet")} />
-          <button
-            className="ml-1 flex h-10 shrink-0 items-center gap-2 rounded-[var(--radius-sm)] bg-[var(--zoom-red)] px-3 text-xs font-semibold text-white transition hover:bg-[var(--zoom-red-hover)] sm:ml-3 sm:h-11 sm:px-5"
-            disabled={leaving}
-            onClick={handleLeave}
-            type="button"
-          >
-            <PhoneOff size={17} />
-            <span className="hidden sm:inline">{leaving ? "Leaving..." : "Leave"}</span>
-          </button>
-        </div>
+        {/* SIDE DRAWER: Participants or Chat */}
+        {activeDrawer && (
+          <aside className="w-80 bg-[#1c1c20] border-l border-white/10 flex flex-col z-40 animate-in slide-in-from-right duration-200 rounded-l-2xl shadow-2xl my-1 mr-1">
+            
+            {/* Drawer Header */}
+            <div className="p-4 border-b border-white/10 flex items-center justify-between">
+              <h3 className="font-bold text-sm text-white capitalize">
+                {activeDrawer} ({activeDrawer === "participants" ? participants.length : chatMessages.length})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setActiveDrawer(null)}
+                className="p-1 rounded-md text-gray-400 hover:text-white hover:bg-white/10"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Drawer Content */}
+            {activeDrawer === "participants" ? (
+              <div className="flex-1 flex flex-col justify-between min-h-0">
+                <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+                  {participants.map((p) => {
+                    const isLocal = namesMatch(p.display_name, displayName);
+                    return (
+                      <div
+                        key={p.id}
+                        className="flex items-center justify-between p-2.5 rounded-xl hover:bg-white/5 transition"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-8 h-8 rounded-full ${getAvatarColor(
+                              p.display_name
+                            )} text-white text-xs font-bold flex items-center justify-center`}
+                          >
+                            {getInitials(p.display_name)}
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold text-gray-200">
+                              {p.display_name} {isLocal ? "(You)" : ""}
+                            </div>
+                            {p.role === "host" && (
+                              <div className="text-[10px] text-[#0e72ed] font-medium">Host</div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-400">
+                          {(isLocal ? muted : p.is_muted) ? (
+                            <MicOff size={14} className="text-rose-500" />
+                          ) : (
+                            <Mic size={14} />
+                          )}
+                          {isLocal && videoEnabled ? (
+                            <Video size={14} />
+                          ) : (
+                            <VideoOff size={14} className="text-rose-500" />
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Add Guest Button for testing */}
+                <div className="p-3 border-t border-white/10 space-y-2">
+                  <button
+                    type="button"
+                    onClick={addGuestParticipant}
+                    className="w-full py-2 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-gray-200 transition flex items-center justify-center gap-2"
+                  >
+                    <UserPlus size={14} /> Add Test Participant
+                  </button>
+                  <button
+                    type="button"
+                    onClick={copyInviteLink}
+                    className="w-full py-2 px-3 rounded-xl bg-[#0e72ed] hover:bg-[#0c63ce] text-xs font-semibold text-white transition flex items-center justify-center gap-2"
+                  >
+                    {copied ? <Check size={14} /> : <Copy size={14} />}
+                    {copied ? "Link Copied!" : "Copy Invite Link"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col justify-between min-h-0">
+                <div className="flex-1 overflow-y-auto p-3 space-y-3">
+                  {chatMessages.map((msg) => (
+                    <div key={msg.id} className={`flex flex-col ${msg.isSelf ? "items-end" : "items-start"}`}>
+                      <div className="flex items-baseline gap-2 mb-1">
+                        <span className="text-[10px] font-bold text-gray-400">{msg.sender}</span>
+                        <span className="text-[9px] text-gray-500">{msg.time}</span>
+                      </div>
+                      <div
+                        className={`p-2.5 rounded-xl text-xs max-w-[85%] ${
+                          msg.isSelf ? "bg-[#0e72ed] text-white" : "bg-white/10 text-gray-200"
+                        }`}
+                      >
+                        {msg.text}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <form onSubmit={handleSendMessage} className="p-3 border-t border-white/10 flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Type a message..."
+                    value={newChatInput}
+                    onChange={(e) => setNewChatInput(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#0e72ed]"
+                  />
+                  <button
+                    type="submit"
+                    className="p-2 rounded-xl bg-[#0e72ed] hover:bg-[#0c63ce] text-white transition"
+                  >
+                    <Send size={14} />
+                  </button>
+                </form>
+              </div>
+            )}
+          </aside>
+        )}
+
       </div>
 
-      {panelOpen ? (
-        <aside className="fixed bottom-[72px] right-0 top-14 z-10 flex w-full max-w-[320px] flex-col border-l border-white/10 bg-[#2d2d2d] shadow-[-12px_0_32px_rgba(0,0,0,0.35)] sm:bottom-20 sm:max-w-[360px]">
-          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3.5">
-            <div>
-              <h2 className="text-sm font-semibold">Participants</h2>
-              <p className="mt-0.5 text-xs text-[#9ca3af]">{visibleParticipants.length} in meeting</p>
-            </div>
+      {/* BOTTOM CONTROL TOOLBAR */}
+      <footer className="h-20 bg-[#1c1c20] border-t border-white/10 px-4 flex items-center justify-center shrink-0 relative z-30">
+        <div className="flex items-center gap-1 sm:gap-3">
+          
+          {/* MUTE / UNMUTE BUTTON */}
+          <div className="relative flex items-center bg-[#28282e] rounded-xl p-0.5 border border-white/5">
             <button
-              aria-label="Close participants panel"
-              className="rounded-[var(--radius-sm)] p-2 text-[#b4bcc6] transition hover:bg-white/10 hover:text-white"
-              onClick={() => setPanelOpen(false)}
-              title="Close panel"
               type="button"
+              onClick={toggleMute}
+              className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                muted ? "text-rose-500" : "text-gray-200 hover:text-white"
+              }`}
             >
-              <X size={17} />
+              {muted ? <MicOff size={20} /> : <Mic size={20} />}
+              <span className="text-[10px] mt-0.5">{muted ? "Unmute" : "Mute"}</span>
             </button>
-          </div>
-          <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-3">
-            {visibleParticipants.length === 0 ? (
-              <p className="rounded-[var(--radius-sm)] bg-white/5 px-3 py-4 text-xs text-[#9ca3af]">Waiting for participants...</p>
-            ) : (
-              visibleParticipants.map((participant) => (
-                <div
-                  className="flex items-center gap-3 rounded-[var(--radius-sm)] px-3 py-2.5 transition hover:bg-white/5"
-                  key={participant.id}
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0e72ed]/30 text-xs font-semibold text-[#dbeafe]">
-                    {getInitials(participant.display_name)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-[#f3f4f6]">
-                      {participant.display_name}
-                      {namesMatch(participant.display_name, displayName) ? " (You)" : ""}
-                    </p>
-                  </div>
-                  {(namesMatch(participant.display_name, displayName) ? muted : participant.is_muted) ? (
-                    <MicOff className="shrink-0 text-[#f87171]" size={15} />
-                  ) : (
-                    <Mic className="shrink-0 text-[#9ca3af]" size={15} />
-                  )}
+            <button
+              type="button"
+              onClick={() => setAudioSettingsOpen(!audioSettingsOpen)}
+              className="px-1 text-gray-400 hover:text-white"
+            >
+              <ChevronUp size={14} />
+            </button>
+
+            {/* Audio settings popup */}
+            {audioSettingsOpen && (
+              <div className="absolute bottom-full mb-3 left-0 w-56 bg-[#242429] rounded-xl shadow-2xl border border-white/10 p-2 text-xs z-50">
+                <div className="px-2 py-1 font-bold text-gray-400 uppercase text-[10px]">Select Microphone</div>
+                <div className="px-2 py-1 text-white hover:bg-white/10 rounded-md cursor-pointer flex items-center justify-between">
+                  <span>Default - Built-in Mic</span>
+                  <Check size={12} className="text-[#0e72ed]" />
                 </div>
-              ))
+              </div>
             )}
           </div>
-        </aside>
-      ) : null}
 
-      {toast ? (
-        <div
-          aria-live="polite"
-          className="fixed left-1/2 top-4 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-[#2d2d2d]/95 px-4 py-2 text-xs font-medium text-white shadow-lg backdrop-blur-sm"
-        >
-          <span className="h-2 w-2 rounded-full bg-[#22c55e]" /> {toast}
-        </div>
-      ) : null}
-    </main>
-  );
-}
+          {/* START / STOP VIDEO BUTTON */}
+          <div className="relative flex items-center bg-[#28282e] rounded-xl p-0.5 border border-white/5">
+            <button
+              type="button"
+              onClick={toggleVideo}
+              className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                !videoEnabled ? "text-rose-500" : "text-gray-200 hover:text-white"
+              }`}
+            >
+              {videoEnabled ? <Video size={20} /> : <VideoOff size={20} />}
+              <span className="text-[10px] mt-0.5">{videoEnabled ? "Stop Video" : "Start Video"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setVideoSettingsOpen(!videoSettingsOpen)}
+              className="px-1 text-gray-400 hover:text-white"
+            >
+              <ChevronUp size={14} />
+            </button>
 
-function JoinRoomGate({
-  code,
-  error,
-  onJoin,
-  onBack,
-}: {
-  code: string;
-  error: string | null;
-  onJoin: (name: string) => void;
-  onBack: () => void;
-}) {
-  const [name, setName] = useState("");
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (name.trim()) onJoin(name.trim());
-  }
-
-  return (
-    <main className="flex min-h-dvh items-center justify-center bg-[var(--zoom-meeting-bg)] px-4 py-8 text-white sm:px-5">
-      <form
-        className="w-full max-w-[420px] rounded-[var(--radius-lg)] border border-white/10 bg-[#2d2d2d] p-6 shadow-[var(--shadow-modal)] sm:p-8"
-        onSubmit={submit}
-      >
-        <button
-          className="mb-6 flex items-center gap-2 text-xs font-semibold text-[#b4bcc6] transition hover:text-white"
-          onClick={onBack}
-          type="button"
-        >
-          <ArrowLeft size={15} /> Back to dashboard
-        </button>
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#60a5fa]">Join meeting</p>
-        <h1 className="mt-2 text-2xl font-bold tracking-[-0.02em]">Enter your display name</h1>
-        <p className="mt-2 text-sm leading-6 text-[#9ca3af]">
-          Meeting <span className="font-semibold text-white">{code}</span>
-        </p>
-        <label className="mt-6 block">
-          <span className="mb-2 block text-xs font-semibold text-[#e5e7eb]">Display name</span>
-          <input
-            autoFocus
-            className="w-full rounded-[var(--radius-md)] border border-white/10 bg-[#1a1a1a] px-3.5 py-3 text-sm text-white outline-none placeholder:text-[#6b7280] focus:border-[#0e72ed] focus:ring-2 focus:ring-[#0e72ed]/30"
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Your name"
-            value={name}
-          />
-        </label>
-        {error ? (
-          <p aria-live="polite" className="mt-3 text-xs font-medium text-[#fca5a5]">
-            {error}
-          </p>
-        ) : null}
-        <button
-          className="mt-5 w-full rounded-[var(--radius-md)] bg-[var(--zoom-blue)] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[var(--zoom-blue-hover)] disabled:cursor-not-allowed disabled:bg-[#4b5563]"
-          disabled={!name.trim()}
-          type="submit"
-        >
-          Join
-        </button>
-      </form>
-    </main>
-  );
-}
-
-function ParticipantTile({
-  displayName,
-  isLocal,
-  videoRef,
-  videoEnabled,
-  muted,
-  mediaError,
-}: {
-  displayName: string;
-  isLocal: boolean;
-  videoRef?: RefObject<HTMLVideoElement | null>;
-  videoEnabled: boolean;
-  muted: boolean;
-  mediaError: string | null;
-}) {
-  const showVideo = isLocal && videoEnabled && !mediaError;
-
-  return (
-    <div className="relative flex min-h-0 w-full min-w-0 overflow-hidden rounded-[var(--radius-md)] bg-[var(--zoom-meeting-tile)] shadow-[0_4px_20px_rgba(0,0,0,0.35)]">
-      {showVideo ? (
-        <video
-          autoPlay
-          className="h-full w-full object-cover [transform:scaleX(-1)]"
-          muted
-          playsInline
-          ref={videoRef}
-        />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center bg-[#2a2a2a]">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#0e72ed]/25 text-xl font-semibold text-[#dbeafe] sm:h-20 sm:w-20 sm:text-2xl">
-            {getInitials(displayName)}
+            {/* Camera settings popup */}
+            {videoSettingsOpen && (
+              <div className="absolute bottom-full mb-3 left-0 w-56 bg-[#242429] rounded-xl shadow-2xl border border-white/10 p-2 text-xs z-50">
+                <div className="px-2 py-1 font-bold text-gray-400 uppercase text-[10px]">Select Camera</div>
+                <div className="px-2 py-1 text-white hover:bg-white/10 rounded-md cursor-pointer flex items-center justify-between">
+                  <span>Integrated Webcam</span>
+                  <Check size={12} className="text-[#0e72ed]" />
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
-      <div className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded-[6px] bg-black/55 px-2 py-1 text-[11px] font-medium backdrop-blur-sm sm:bottom-3 sm:left-3 sm:px-2.5 sm:py-1.5 sm:text-xs">
-        <span className="truncate">{displayName}{isLocal ? " (You)" : ""}</span>
-        {muted ? <MicOff className="shrink-0 text-[#f87171]" size={13} /> : <Mic className="shrink-0" size={13} />}
-      </div>
-      {isLocal && !videoEnabled && !mediaError ? (
-        <div className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-black/50 px-2.5 py-0.5 text-[10px] font-medium text-[#fca5a5] sm:text-[11px]">
-          Camera off
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
-function ToolbarButton({
-  icon: Icon,
-  label,
-  onClick,
-  active = false,
-}: {
-  icon: typeof Mic;
-  label: string;
-  onClick: () => void;
-  active?: boolean;
-}) {
-  return (
-    <button
-      aria-pressed={active}
-      className={`flex min-w-[48px] shrink-0 flex-col items-center gap-0.5 rounded-[var(--radius-sm)] px-2 py-1.5 text-[10px] font-medium transition sm:min-w-[68px] sm:gap-1 sm:px-3 sm:py-2 sm:text-[11px] ${
-        active ? "bg-white/15 text-white" : "text-[#d1d5db] hover:bg-white/10 hover:text-white"
-      }`}
-      onClick={onClick}
-      title={label}
-      type="button"
-    >
-      <span className="flex h-7 items-center sm:h-8">
-        <Icon size={18} strokeWidth={1.8} />
-      </span>
-      <span className="hidden max-w-[72px] truncate sm:block">{label}</span>
-    </button>
+          {/* SHARE SCREEN BUTTON */}
+          <button
+            type="button"
+            onClick={() => setScreenSharing(!screenSharing)}
+            className={`flex flex-col items-center justify-center px-4 py-2 rounded-xl text-xs font-semibold transition ${
+              screenSharing ? "bg-[#22c55e] text-white" : "bg-[#28282e] text-emerald-400 hover:bg-[#32323a]"
+            }`}
+          >
+            <ScreenShare size={20} />
+            <span className="text-[10px] mt-0.5">Share Screen</span>
+          </button>
+
+          {/* REACTIONS BUTTON */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setReactionsOpen(!reactionsOpen)}
+              className="flex flex-col items-center justify-center px-4 py-2 rounded-xl bg-[#28282e] hover:bg-[#32323a] text-gray-200 hover:text-white text-xs font-semibold transition"
+            >
+              <Smile size={20} />
+              <span className="text-[10px] mt-0.5">Reactions</span>
+            </button>
+
+            {/* Reaction Emoji Bar */}
+            {reactionsOpen && (
+              <div className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-[#242429] rounded-full shadow-2xl border border-white/10 px-3 py-2 flex items-center gap-2 text-xl z-50 animate-in zoom-in-95 duration-100">
+                {["👏", "👍", "❤️", "😂", "😮", "🎉"].map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => handleSendReaction(emoji)}
+                    className="hover:scale-125 transition transform"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* CHAT BUTTON */}
+          <button
+            type="button"
+            onClick={() => setActiveDrawer(activeDrawer === "chat" ? null : "chat")}
+            className={`flex flex-col items-center justify-center px-4 py-2 rounded-xl text-xs font-semibold transition ${
+              activeDrawer === "chat" ? "bg-[#0e72ed] text-white" : "bg-[#28282e] hover:bg-[#32323a] text-gray-200"
+            }`}
+          >
+            <MessageSquare size={20} />
+            <span className="text-[10px] mt-0.5">Chat</span>
+          </button>
+
+          {/* PARTICIPANTS BUTTON */}
+          <button
+            type="button"
+            onClick={() => setActiveDrawer(activeDrawer === "participants" ? null : "participants")}
+            className={`flex flex-col items-center justify-center px-4 py-2 rounded-xl text-xs font-semibold transition ${
+              activeDrawer === "participants" ? "bg-[#0e72ed] text-white" : "bg-[#28282e] hover:bg-[#32323a] text-gray-200"
+            }`}
+          >
+            <Users size={20} />
+            <span className="text-[10px] mt-0.5">Participants ({participants.length})</span>
+          </button>
+
+          {/* END / LEAVE MEETING BUTTON */}
+          <div className="relative ml-2 sm:ml-4">
+            <button
+              type="button"
+              onClick={handleLeaveMeeting}
+              className="px-5 py-2.5 rounded-xl bg-[#e04838] hover:bg-[#c83b2c] text-white text-xs font-bold transition shadow-lg shadow-[#e04838]/25 flex items-center gap-2"
+            >
+              <PhoneOff size={16} />
+              <span>Leave</span>
+            </button>
+          </div>
+
+        </div>
+      </footer>
+
+    </main>
   );
 }

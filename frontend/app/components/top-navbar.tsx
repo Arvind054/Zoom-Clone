@@ -1,22 +1,127 @@
-import { Bell, ChevronDown, Settings } from "lucide-react";
+"use client";
+
+import { useState } from "react";
+import { Bell, Search, Settings, ChevronDown, Check, ShieldCheck } from "lucide-react";
 
 export function TopNavbar() {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const [userStatus, setUserStatus] = useState<"available" | "busy" | "away">("available");
+
   return (
-    <header className="flex h-14 items-center justify-between border-b border-[var(--zoom-border)] bg-[var(--zoom-surface)] px-4 sm:h-16 sm:px-6 lg:px-8">
-      <div className="flex items-center gap-2.5 sm:gap-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--zoom-blue)] shadow-[0_4px_10px_rgba(14,114,237,0.22)] sm:h-9 sm:w-9"><span className="text-base font-bold tracking-[-0.08em] text-white sm:text-lg">Z</span></div>
-        <span className="text-base font-bold tracking-[-0.03em] text-[var(--foreground)] sm:text-[17px]">zoom<span className="text-[var(--zoom-blue)]">.work</span></span>
+    <header className="h-14 bg-white border-b border-[#e2e8f0] px-6 flex items-center justify-between shrink-0 select-none">
+      {/* Brand logo & Search */}
+      <div className="flex items-center gap-6">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-[#0e72ed] flex items-center justify-center text-white font-bold text-lg shadow-[0_4px_12px_rgba(14,114,237,0.3)]">
+            z
+          </div>
+          <span className="font-bold text-lg tracking-tight text-[#0f172a]">
+            zoom
+          </span>
+        </div>
+
+        {/* Global Search Bar */}
+        <div className="relative hidden md:block w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" size={16} />
+          <input
+            type="text"
+            placeholder="Search meetings, contacts..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-4 py-1.5 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg text-xs text-[#0f172a] placeholder-[#94a3b8] focus:outline-none focus:border-[#0e72ed] focus:bg-white transition"
+          />
+        </div>
       </div>
 
-      <div className="flex items-center gap-1 sm:gap-3">
-        <button aria-label="Notifications" className="relative rounded-[var(--radius-sm)] p-2 text-[var(--zoom-muted)] transition hover:bg-[#f2f5f9] hover:text-[var(--foreground)]" title="Notifications" type="button"><Bell size={19} strokeWidth={1.8} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#f45d48] ring-2 ring-white" /></button>
-        <button aria-label="Settings" className="rounded-[var(--radius-sm)] p-2 text-[var(--zoom-muted)] transition hover:bg-[#f2f5f9] hover:text-[var(--foreground)]" title="Settings" type="button"><Settings size={19} strokeWidth={1.8} /></button>
-        <div className="ml-0.5 hidden h-7 w-px bg-[var(--zoom-border)] sm:block" />
-        <button className="flex items-center gap-2 rounded-[var(--radius-md)] p-1.5 pr-2 transition hover:bg-[#f5f7fa] sm:gap-2.5" type="button">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#dce9ff] text-xs font-bold text-[var(--zoom-blue)] sm:h-9 sm:w-9">AC</span>
-          <span className="hidden text-left md:block"><span className="block text-xs font-semibold leading-4 text-[var(--foreground)]">Arvind Choudhary</span><span className="block text-[11px] leading-4 text-[var(--zoom-muted)]">Personal workspace</span></span>
-          <ChevronDown className="hidden text-[var(--zoom-muted)] md:block" size={15} />
+      {/* Right Controls */}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          className="p-2 rounded-lg text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#0f172a] transition relative"
+          title="Notifications"
+        >
+          <Bell size={18} />
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#f26d21] rounded-full ring-2 ring-white" />
         </button>
+
+        <button
+          type="button"
+          className="p-2 rounded-lg text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#0f172a] transition"
+          title="Settings"
+        >
+          <Settings size={18} />
+        </button>
+
+        <div className="h-5 w-px bg-[#e2e8f0] mx-1" />
+
+        {/* User Profile */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setStatusMenuOpen(!statusMenuOpen)}
+            className="flex items-center gap-2.5 p-1 hover:bg-[#f1f5f9] rounded-xl transition"
+          >
+            <div className="relative">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#0e72ed] to-[#38bdf8] text-white font-bold text-xs flex items-center justify-center">
+                AC
+              </div>
+              <span
+                className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full ring-2 ring-white ${
+                  userStatus === "available"
+                    ? "bg-emerald-500"
+                    : userStatus === "busy"
+                    ? "bg-rose-500"
+                    : "bg-amber-500"
+                }`}
+              />
+            </div>
+            <div className="hidden sm:block text-left">
+              <div className="text-xs font-semibold text-[#0f172a]">Arvind C.</div>
+              <div className="text-[10px] text-[#64748b] capitalize">{userStatus}</div>
+            </div>
+            <ChevronDown size={14} className="text-[#64748b] hidden sm:block" />
+          </button>
+
+          {/* Status Dropdown Menu */}
+          {statusMenuOpen && (
+            <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-[#e2e8f0] py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+              <div className="px-3 py-1.5 text-[11px] font-semibold text-[#94a3b8] uppercase tracking-wider">
+                Set Status
+              </div>
+              <button
+                type="button"
+                onClick={() => { setUserStatus("available"); setStatusMenuOpen(false); }}
+                className="w-full text-left px-3 py-2 text-xs text-[#0f172a] hover:bg-[#f8fafc] flex items-center justify-between"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" /> Available
+                </span>
+                {userStatus === "available" && <Check size={14} className="text-[#0e72ed]" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setUserStatus("busy"); setStatusMenuOpen(false); }}
+                className="w-full text-left px-3 py-2 text-xs text-[#0f172a] hover:bg-[#f8fafc] flex items-center justify-between"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-rose-500" /> Do Not Disturb
+                </span>
+                {userStatus === "busy" && <Check size={14} className="text-[#0e72ed]" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setUserStatus("away"); setStatusMenuOpen(false); }}
+                className="w-full text-left px-3 py-2 text-xs text-[#0f172a] hover:bg-[#f8fafc] flex items-center justify-between"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-500" /> Away
+                </span>
+                {userStatus === "away" && <Check size={14} className="text-[#0e72ed]" />}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
