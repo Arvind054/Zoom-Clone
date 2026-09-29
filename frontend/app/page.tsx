@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { AppShell } from "./components/app-shell";
 import { JoinModal } from "./components/join-modal";
 import { MeetingCard } from "./components/meeting-card";
+import { ScheduleModal } from "./components/schedule-modal";
 import {
   createInstantMeeting,
   getRecentMeetings,
@@ -80,6 +81,7 @@ export default function Home() {
   const [upcomingState, setUpcomingState] = useState<LoadState>("loading");
   const [recentState, setRecentState] = useState<LoadState>("loading");
   const [joinOpen, setJoinOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -100,12 +102,21 @@ export default function Home() {
     }
   }
 
+  function handleScheduledMeeting(meeting: Meeting) {
+    setUpcoming((current) => [...current.filter((item) => item.id !== meeting.id), meeting].sort((first, second) => {
+      const firstTime = first.scheduled_start ? new Date(first.scheduled_start).getTime() : Number.MAX_SAFE_INTEGER;
+      const secondTime = second.scheduled_start ? new Date(second.scheduled_start).getTime() : Number.MAX_SAFE_INTEGER;
+      return firstTime - secondTime;
+    }));
+    setUpcomingState("ready");
+  }
+
   return (
     <AppShell>
       <div className="mx-auto max-w-[1380px] px-5 py-8 sm:px-8 lg:px-10 lg:py-10">
         <div className="mb-8"><p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-[#0b5cff]">Tuesday, September 29</p><h1 className="text-[30px] font-bold tracking-[-0.04em] text-[#172235] sm:text-[36px]">Good morning, Arvind</h1><p className="mt-2 text-sm text-[#768194]">What would you like to do today?</p></div>
 
-        <section aria-label="Meeting actions" className="grid gap-4 sm:grid-cols-3">{actions.map(({ label, description, icon: Icon, className }) => <button aria-busy={label === "New Meeting" ? creating : undefined} className={`group flex min-h-[142px] flex-col items-start justify-between rounded-2xl p-5 text-left text-white transition duration-200 hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-70 ${className}`} disabled={label === "New Meeting" && creating} key={label} onClick={label === "New Meeting" ? handleNewMeeting : label === "Join" ? () => { setActionError(null); setJoinOpen(true); } : undefined} type="button"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20"><Icon size={21} strokeWidth={2} /></span><span><span className="block text-lg font-bold tracking-[-0.02em]">{label === "New Meeting" && creating ? "Starting..." : label}</span><span className="mt-1 block text-xs text-white/75">{description}</span></span></button>)}</section>
+        <section aria-label="Meeting actions" className="grid gap-4 sm:grid-cols-3">{actions.map(({ label, description, icon: Icon, className }) => <button aria-busy={label === "New Meeting" ? creating : undefined} className={`group flex min-h-[142px] flex-col items-start justify-between rounded-2xl p-5 text-left text-white transition duration-200 hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-70 ${className}`} disabled={label === "New Meeting" && creating} key={label} onClick={label === "New Meeting" ? handleNewMeeting : label === "Join" ? () => { setActionError(null); setJoinOpen(true); } : () => { setActionError(null); setScheduleOpen(true); }} type="button"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20"><Icon size={21} strokeWidth={2} /></span><span><span className="block text-lg font-bold tracking-[-0.02em]">{label === "New Meeting" && creating ? "Starting..." : label}</span><span className="mt-1 block text-xs text-white/75">{description}</span></span></button>)}</section>
         {actionError ? <p aria-live="polite" className="mt-3 text-xs font-medium text-[#c35449]">{actionError}</p> : null}
 
         <div className="my-10 h-px bg-[#e5eaf1]" />
@@ -117,6 +128,7 @@ export default function Home() {
         <div className="mt-10 flex items-center gap-2 rounded-lg border border-[#e6eaf0] bg-white px-4 py-3 text-xs text-[#768194]"><Users size={15} className="text-[#0b5cff]" /> Invite your teammates to collaborate in your workspace.</div>
       </div>
       <JoinModal key={joinOpen ? "join-open" : "join-closed"} onClose={() => setJoinOpen(false)} open={joinOpen} />
+      <ScheduleModal key={scheduleOpen ? "schedule-open" : "schedule-closed"} onClose={() => setScheduleOpen(false)} onCreated={handleScheduledMeeting} open={scheduleOpen} />
     </AppShell>
   );
 }
