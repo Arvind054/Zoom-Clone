@@ -39,6 +39,7 @@ export function JoinModal({ open, onClose }: JoinModalProps) {
     try {
       await getMeeting(code);
       await joinMeeting(code, { display_name: displayName.trim() });
+      window.sessionStorage.setItem("zoom-display-name", displayName.trim());
       router.push(`/meeting/${code}`);
     } catch (joinError) {
       if (joinError instanceof ApiError && joinError.status === 404) {

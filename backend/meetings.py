@@ -3,9 +3,9 @@ from __future__ import annotations
 import random
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
@@ -190,15 +190,23 @@ def join_meeting(
 
 
 @router.post("/{code}/leave", response_model=MeetingResponse)
-def leave_meeting(code: str, db: Session = Depends(get_db)) -> Meeting:
+def leave_meeting(
+    code: str,
+    display_name: str = Query(..., min_length=1, max_length=120),
+    db: Session = Depends(get_db),
+) -> Meeting:
     meeting = get_meeting_or_404(db, code)
     now = datetime.now(UTC).replace(tzinfo=None)
-    db.execute(
-        update(Participant)
-        .where(Participant.meeting_id == meeting.id, Participant.left_at.is_(None))
-        .values(left_at=now)
+    participant = db.scalar(
+        select(Participant).where(
+            Participant.meeting_id == meeting.id,
+            Participant.display_name == display_name,
+            Participant.left_at.is_(None),
+        )
     )
-    meeting.status = MeetingStatus.ENDED
+    if participant is None:
+        raise HTTPException(status_code=404, detail="Active participant not found")
+    participant.left_at = now
     db.commit()
     return get_meeting_or_404(db, code)
 
@@ -209,7 +217,10 @@ def list_participants(code: str, db: Session = Depends(get_db)) -> ParticipantLi
     participants = list(
         db.scalars(
             select(Participant)
-            .where(Participant.meeting_id == meeting.id)
+            .where(
+                Participant.meeting_id == meeting.id,
+                Participant.left_at.is_(None),
+            )
             .order_by(Participant.joined_at)
         ).all()
     )

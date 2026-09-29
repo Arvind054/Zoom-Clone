@@ -103,8 +103,8 @@ export function joinMeeting(code: string, input: JoinMeetingInput): Promise<Part
   });
 }
 
-export function leaveMeeting(code: string): Promise<Meeting> {
-  return request<Meeting>(`/meetings/${encodeURIComponent(code)}/leave`, {
+export function leaveMeeting(code: string, displayName: string): Promise<Meeting> {
+  return request<Meeting>(`/meetings/${encodeURIComponent(code)}/leave?display_name=${encodeURIComponent(displayName)}`, {
     method: "POST",
   });
 }
