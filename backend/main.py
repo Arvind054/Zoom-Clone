@@ -1,8 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from database import engine
+from meetings import router as meetings_router
+from models import Base
 
 app = FastAPI(title="Zoom Clone API")
+
+Base.metadata.create_all(engine)
+app.include_router(meetings_router)
 
 app.add_middleware(
     CORSMiddleware,
