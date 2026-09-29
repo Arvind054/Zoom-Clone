@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Next.js build output
+.next/
+out/
+
+# Python virtual environments and generated files
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Environment files and local secrets
+.env
+.env.*
+!.env.example
+
+# Coverage and build artifacts
+coverage/
+dist/
+build/
+*.log
+
+# Local editor and OS files
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
