@@ -11,10 +11,12 @@ type ScheduleModalProps = {
   onCreated: (meeting: Meeting) => void;
 };
 
-function getDefaultDate() {
+function getTodayDate() {
   const date = new Date();
-  date.setDate(date.getDate() + 1);
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function getDefaultTime() {
@@ -26,7 +28,7 @@ function getDefaultTime() {
 export function ScheduleModal({ open, onClose, onCreated }: ScheduleModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [date, setDate] = useState(getDefaultDate);
+  const [date, setDate] = useState(getTodayDate);
   const [time, setTime] = useState(getDefaultTime);
   const [duration, setDuration] = useState("30");
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export function ScheduleModal({ open, onClose, onCreated }: ScheduleModalProps) 
         title: title.trim(),
         description: description.trim() || null,
         duration_min: Number(duration),
-        scheduled_start: new Date(`${date}T${time}`).toISOString(),
+        scheduled_start: `${date}T${time}:00`,
       });
       onCreated(meeting);
       setInviteLink(`${window.location.origin}/meeting/${meeting.meeting_code}`);
@@ -79,7 +81,7 @@ export function ScheduleModal({ open, onClose, onCreated }: ScheduleModalProps) 
           <form className="mt-7 space-y-5" onSubmit={handleSubmit}>
             <label className="block"><span className="mb-2 block text-xs font-bold text-[#354155]">Title</span><input autoFocus className="w-full rounded-[10px] border border-[#dce2ea] bg-[#fbfcfe] px-3.5 py-3 text-sm text-[#172235] outline-none transition placeholder:text-[#a3adbb] focus:border-[#70c69a] focus:bg-white focus:ring-2 focus:ring-[#e4f5eb]" onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Product roadmap review" required value={title} /></label>
             <label className="block"><span className="mb-2 block text-xs font-bold text-[#354155]">Description <span className="font-normal text-[#a3adbb]">(optional)</span></span><textarea className="min-h-[76px] w-full resize-none rounded-[10px] border border-[#dce2ea] bg-[#fbfcfe] px-3.5 py-3 text-sm text-[#172235] outline-none transition placeholder:text-[#a3adbb] focus:border-[#70c69a] focus:bg-white focus:ring-2 focus:ring-[#e4f5eb]" onChange={(event) => setDescription(event.target.value)} placeholder="What will you cover?" value={description} /></label>
-            <div className="grid gap-4 sm:grid-cols-[1.1fr_0.9fr]"><label className="block"><span className="mb-2 block text-xs font-bold text-[#354155]">Date</span><input className="w-full rounded-[10px] border border-[#dce2ea] bg-[#fbfcfe] px-3.5 py-3 text-sm text-[#172235] outline-none transition focus:border-[#70c69a] focus:bg-white focus:ring-2 focus:ring-[#e4f5eb]" min={getDefaultDate()} onChange={(event) => setDate(event.target.value)} required type="date" value={date} /></label><label className="block"><span className="mb-2 block text-xs font-bold text-[#354155]">Time</span><input className="w-full rounded-[10px] border border-[#dce2ea] bg-[#fbfcfe] px-3.5 py-3 text-sm text-[#172235] outline-none transition focus:border-[#70c69a] focus:bg-white focus:ring-2 focus:ring-[#e4f5eb]" onChange={(event) => setTime(event.target.value)} required type="time" value={time} /></label></div>
+            <div className="grid gap-4 sm:grid-cols-[1.1fr_0.9fr]"><label className="block"><span className="mb-2 block text-xs font-bold text-[#354155]">Date</span><input className="w-full rounded-[10px] border border-[#dce2ea] bg-[#fbfcfe] px-3.5 py-3 text-sm text-[#172235] outline-none transition focus:border-[#70c69a] focus:bg-white focus:ring-2 focus:ring-[#e4f5eb]" min={getTodayDate()} onChange={(event) => setDate(event.target.value)} required type="date" value={date} /></label><label className="block"><span className="mb-2 block text-xs font-bold text-[#354155]">Time</span><input className="w-full rounded-[10px] border border-[#dce2ea] bg-[#fbfcfe] px-3.5 py-3 text-sm text-[#172235] outline-none transition focus:border-[#70c69a] focus:bg-white focus:ring-2 focus:ring-[#e4f5eb]" onChange={(event) => setTime(event.target.value)} required type="time" value={time} /></label></div>
             <label className="block"><span className="mb-2 block text-xs font-bold text-[#354155]">Duration</span><select className="w-full rounded-[10px] border border-[#dce2ea] bg-[#fbfcfe] px-3.5 py-3 text-sm text-[#172235] outline-none transition focus:border-[#70c69a] focus:bg-white focus:ring-2 focus:ring-[#e4f5eb]" onChange={(event) => setDuration(event.target.value)} value={duration}><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">1 hour</option><option value="90">1 hour 30 minutes</option><option value="120">2 hours</option></select></label>
             {error ? <p aria-live="polite" className="text-xs font-medium text-[#c35449]">{error}</p> : null}
             <button className="flex w-full items-center justify-center gap-2 rounded-[10px] bg-[#36a269] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#2d8c5a] disabled:cursor-not-allowed disabled:bg-[#b7d8c4]" disabled={submitting || !title.trim() || !date || !time} type="submit">{submitting ? <><LoaderCircle className="animate-spin" size={16} /> Scheduling...</> : "Schedule meeting"}</button>
