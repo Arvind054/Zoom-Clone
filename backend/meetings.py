@@ -255,6 +255,17 @@ def leave_meeting(
     if participant is None:
         raise HTTPException(status_code=404, detail="Active participant not found")
     participant.left_at = now
+    db.flush()
+
+    remaining_participant = db.scalar(
+        select(Participant.id).where(
+            Participant.meeting_id == meeting.id,
+            Participant.left_at.is_(None),
+        )
+    )
+    if remaining_participant is None:
+        meeting.status = MeetingStatus.ENDED
+
     db.commit()
     return get_meeting_or_404(db, code)
 

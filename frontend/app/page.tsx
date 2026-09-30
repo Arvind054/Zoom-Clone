@@ -21,6 +21,7 @@ import { AppShell } from "./components/app-shell";
 import { JoinModal } from "./components/join-modal";
 import { ScheduleModal } from "./components/schedule-modal";
 import { ShareModal } from "./components/share-modal";
+import { MeetingCard } from "./components/meeting-card";
 import { getStoredUser } from "../lib/auth";
 import {
   createInstantMeeting,
@@ -253,6 +254,31 @@ export default function Home() {
                     </div>
                   </div>
                 )}
+
+                <section className="mt-10" aria-labelledby="recent-meetings-title">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h2 id="recent-meetings-title" className="text-xs font-bold uppercase tracking-wider text-[#64748b]">
+                      Recent Meetings
+                    </h2>
+                    {recent.length > 0 ? (
+                      <span className="text-xs text-[#94a3b8]">{recent.length} completed</span>
+                    ) : null}
+                  </div>
+
+                  {recentState === "loading" ? (
+                    <p className="py-6 text-center text-sm text-[#94a3b8]">Loading recent meetings...</p>
+                  ) : recent.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-[#dce2ea] px-4 py-6 text-center text-sm text-[#94a3b8]">
+                      No recent meetings
+                    </p>
+                  ) : (
+                    <div className="grid gap-3 xl:grid-cols-2">
+                      {recent.map((meeting) => (
+                        <MeetingCard key={meeting.id} meeting={meeting} recent />
+                      ))}
+                    </div>
+                  )}
+                </section>
               </div>
 
               {/* Action Error Message if any */}
