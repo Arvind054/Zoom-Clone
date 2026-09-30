@@ -45,6 +45,7 @@ export default function Home() {
   const [joinOpen, setJoinOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [showAllRecent, setShowAllRecent] = useState(false);
 
   const [creating, setCreating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -124,6 +125,8 @@ export default function Home() {
   }, [authReady]);
 
   if (!authReady) return null;
+
+  const visibleRecentMeetings = showAllRecent ? recent : recent.slice(0, 2);
 
   async function handleNewMeeting() {
     setActionError(null);
@@ -273,11 +276,21 @@ export default function Home() {
                     </p>
                   ) : (
                     <div className="grid gap-3 xl:grid-cols-2">
-                      {recent.map((meeting) => (
+                      {visibleRecentMeetings.map((meeting) => (
                         <MeetingCard key={meeting.id} meeting={meeting} recent />
                       ))}
                     </div>
                   )}
+
+                  {recent.length > 2 ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllRecent((current) => !current)}
+                      className="mt-4 text-xs font-semibold text-[#0e72ed] hover:underline"
+                    >
+                      {showAllRecent ? "Show less" : `Show more (${recent.length - 2})`}
+                    </button>
+                  ) : null}
                 </section>
               </div>
 

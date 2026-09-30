@@ -189,8 +189,13 @@ def list_recent_meetings(
         db.scalars(
             select(Meeting)
             .options(selectinload(Meeting.participants))
-            .where(Meeting.status == MeetingStatus.ENDED, Meeting.host_id == current_user.id)
-            .order_by(Meeting.scheduled_start.desc())
+            .outerjoin(Participant, Participant.meeting_id == Meeting.id)
+            .where(
+                Meeting.status == MeetingStatus.ENDED,
+                (Meeting.host_id == current_user.id) | (Participant.user_id == current_user.id),
+            )
+            .distinct()
+            .order_by(Meeting.created_at.desc())
         ).all()
     )
 
