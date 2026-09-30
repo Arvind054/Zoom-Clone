@@ -33,6 +33,7 @@ import {
   type Meeting,
   type Participant,
 } from "../../../lib/api";
+import { getStoredUser } from "../../../lib/auth";
 
 type ReactionEmoji = {
   id: number;
@@ -91,6 +92,7 @@ export default function MeetingRoom() {
   const params = useParams<{ code: string }>();
   const router = useRouter();
   const code = params.code || "zoom-meeting";
+  const currentUserId = Number(getStoredUser()?.id) || null;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -174,7 +176,11 @@ export default function MeetingRoom() {
     let active = true;
     setJoining(true);
 
-    joinMeeting(code, { display_name: displayName })
+    const storedUser = getStoredUser();
+    joinMeeting(code, {
+      display_name: displayName,
+      user_id: storedUser ? Number(storedUser.id) : undefined,
+    })
       .then((selfParticipant) => {
         if (!active) return;
         setJoined(true);
@@ -190,6 +196,7 @@ export default function MeetingRoom() {
           setJoined(true);
           const selfP: Participant = {
             id: Date.now(),
+            user_id: null,
             display_name: displayName,
             role: "host",
             is_muted: muted,
@@ -211,6 +218,12 @@ export default function MeetingRoom() {
       active = false;
     };
   }, [code, displayName]);
+
+  useEffect(() => {
+    if (!videoEnabled || !videoRef.current || !streamRef.current) return;
+    videoRef.current.srcObject = streamRef.current;
+    void videoRef.current.play().catch(() => undefined);
+  }, [videoEnabled]);
 
   // Poll for real participant updates every 2.5 seconds
   useEffect(() => {
@@ -335,6 +348,7 @@ export default function MeetingRoom() {
 
     const newP: Participant = {
       id: Date.now(),
+      user_id: null,
       display_name: name,
       role: "participant",
       is_muted: Math.random() > 0.5,
@@ -509,24 +523,36 @@ export default function MeetingRoom() {
         <div className="flex-1 flex flex-col items-center justify-center min-h-0">
           <div className={`w-full h-full mx-auto grid gap-3 ${gridLayoutClass(participants.length)}`}>
             {participants.map((p) => {
-              const isLocal = namesMatch(p.display_name, displayName);
+              const isLocal = p.user_id === currentUserId || namesMatch(p.display_name, displayName);
 
               return (
                 <div
                   key={p.id}
                   className="relative rounded-2xl overflow-hidden bg-[#1c1c21] border border-white/5 shadow-lg flex items-center justify-center group"
                 >
-                  {/* Local Video Stream or Initials Avatar */}
-                  {isLocal && videoEnabled ? (
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="w-full h-full object-cover transform -scale-x-100"
-                    />
+                  {/* Keep the local video mounted so camera tracks survive toggles. */}
+                  {isLocal ? (
+                    <>
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className={`w-full h-full object-cover transform -scale-x-100 ${videoEnabled ? "block" : "hidden"}`}
+                      />
+                      {!videoEnabled && (
+                        <div className="w-full h-full flex items-center justify-center bg-[#18181c]">
+                          <div
+                            className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full ${getAvatarColor(
+                              p.display_name
+                            )} text-white font-bold text-2xl sm:text-3xl flex items-center justify-center shadow-xl ring-4 ring-white/10`}
+                          >
+                            {getInitials(p.display_name)}
+                          </div>
+                        </div>
+                      )}
+                    </>
                   ) : (
-                    // Initial Avatar Circle
                     <div className="w-full h-full flex items-center justify-center bg-[#18181c]">
                       <div
                         className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full ${getAvatarColor(
@@ -593,7 +619,7 @@ export default function MeetingRoom() {
               <div className="flex-1 flex flex-col justify-between min-h-0">
                 <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
                   {participants.map((p) => {
-                    const isLocal = namesMatch(p.display_name, displayName);
+                    const isLocal = p.user_id === currentUserId || namesMatch(p.display_name, displayName);
                     return (
                       <div
                         key={p.id}

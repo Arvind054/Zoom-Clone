@@ -10,6 +10,7 @@ export type UserResponse = {
 
 export type Participant = {
   id: number;
+  user_id: number | null;
   display_name: string;
   role: ParticipantRole;
   is_muted: boolean;

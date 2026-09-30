@@ -5,6 +5,7 @@ import { LoaderCircle, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { ApiError, getMeeting, joinMeeting } from "../../lib/api";
+import { getStoredUser } from "../../lib/auth";
 
 const meetingCodePattern = /\b\d{3}-\d{3}-\d{4}\b/;
 
@@ -38,7 +39,11 @@ export function JoinModal({ open, onClose }: JoinModalProps) {
     setSubmitting(true);
     try {
       await getMeeting(code);
-      await joinMeeting(code, { display_name: displayName.trim() });
+      const user = getStoredUser();
+      await joinMeeting(code, {
+        display_name: displayName.trim(),
+        user_id: user ? Number(user.id) : undefined,
+      });
       window.sessionStorage.setItem("zoom-display-name", displayName.trim());
       router.push(`/meeting/${code}`);
     } catch (joinError) {

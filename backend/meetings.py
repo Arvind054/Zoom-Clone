@@ -34,6 +34,7 @@ class ParticipantResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    user_id: int | None
     display_name: str
     role: ParticipantRole
     is_muted: bool
@@ -207,6 +208,21 @@ def join_meeting(
     meeting = get_meeting_or_404(db, code)
     display_name = payload.display_name.strip()
 
+    user_obj = None
+    if payload.user_id is not None:
+        user_obj = db.scalar(select(User).where(User.id == payload.user_id))
+
+    if user_obj is not None:
+        active_user_participant = db.scalar(
+            select(Participant).where(
+                Participant.meeting_id == meeting.id,
+                Participant.user_id == user_obj.id,
+                Participant.left_at.is_(None),
+            )
+        )
+        if active_user_participant is not None:
+            return active_user_participant
+
     active_participant = db.scalar(
         select(Participant).where(
             Participant.meeting_id == meeting.id,
@@ -216,11 +232,6 @@ def join_meeting(
     )
     if active_participant is not None:
         return active_participant
-
-    # Optionally associate user_id if provided
-    user_obj = None
-    if payload.user_id is not None:
-        user_obj = db.scalar(select(User).where(User.id == payload.user_id))
 
     participant = Participant(
         meeting=meeting,
