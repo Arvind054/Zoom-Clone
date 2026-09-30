@@ -6,11 +6,15 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import create_engine, delete, select
 from sqlalchemy.orm import Session
 
+from auth import hash_password
+from database import migrate_sqlite_schema
 from models import Base, Meeting, MeetingStatus, Participant, ParticipantRole, User
 
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///zoom_clone.db")
 DEFAULT_USER_NAME = "Arvind Choudhary"
+DEFAULT_USER_EMAIL = "arvind@example.com"
+DEFAULT_USER_PASSWORD = "password123"
 
 MEETINGS = [
     {
@@ -107,14 +111,22 @@ def get_or_create_default_user(session: Session) -> User:
         select(User).where(User.display_name == DEFAULT_USER_NAME)
     )
     if user is None:
-        user = User(display_name=DEFAULT_USER_NAME)
+        user = User(
+            display_name=DEFAULT_USER_NAME,
+            email=DEFAULT_USER_EMAIL,
+            password_hash=hash_password(DEFAULT_USER_PASSWORD),
+        )
         session.add(user)
         session.flush()
+    else:
+        user.email = DEFAULT_USER_EMAIL
+        user.password_hash = hash_password(DEFAULT_USER_PASSWORD)
     return user
 
 
 def seed_database() -> None:
     engine = create_engine(DATABASE_URL)
+    migrate_sqlite_schema()
     Base.metadata.create_all(engine)
     now = datetime.now(UTC).replace(tzinfo=None, second=0, microsecond=0)
 
