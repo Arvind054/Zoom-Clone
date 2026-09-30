@@ -7,6 +7,7 @@ export type User = {
   avatar?: string;
   initials: string;
   status: "available" | "busy" | "away";
+  token: string;
 };
 
 const USER_STORAGE_KEY = "zoom_authenticated_user";
@@ -16,19 +17,19 @@ export function getStoredUser(): User | null {
   try {
     const data = localStorage.getItem(USER_STORAGE_KEY);
     if (data) {
-      return JSON.parse(data) as User;
+      const user = JSON.parse(data) as Partial<User>;
+      if (user.token && user.id && user.name && user.email) {
+        return user as User;
+      }
     }
   } catch {
     // fallback
   }
-  // Default demo user if none saved
-  return {
-    id: "user-101",
-    name: "Arvind Choudhary",
-    email: "arvind@example.com",
-    initials: "AC",
-    status: "available",
-  };
+  return null;
+}
+
+export function getAuthToken(): string | null {
+  return getStoredUser()?.token ?? null;
 }
 
 export function saveUser(user: User): void {

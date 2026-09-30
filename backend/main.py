@@ -2,13 +2,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from auth import router as auth_router
-from database import engine
+from database import engine, migrate_sqlite_schema
 from meetings import router as meetings_router
 from models import Base
 
 app = FastAPI(title="Zoom Clone API")
 
 Base.metadata.create_all(engine)
+migrate_sqlite_schema()
 app.include_router(auth_router)
 app.include_router(meetings_router)
 

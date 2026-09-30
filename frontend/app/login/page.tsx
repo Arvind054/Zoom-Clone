@@ -40,6 +40,7 @@ export default function LoginPage() {
         email: res.email,
         initials: initials,
         status: "available",
+        token: res.token,
       });
 
       setLoading(false);
@@ -48,47 +49,13 @@ export default function LoginPage() {
       // Fallback for demo if backend is offline or returns error
       if (err instanceof ApiError && err.detail) {
         setError(err.detail);
-      } else {
-        const username = email.split("@")[0] || "User";
-        const formattedName = username
-          .split(/[._-]/)
-          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-          .join(" ");
-
-        const initials = formattedName
-          .split(" ")
-          .map((n) => n[0])
-          .join("")
-          .slice(0, 2)
-          .toUpperCase() || "Z";
-
-        saveUser({
-          id: `user-${Date.now()}`,
-          name: formattedName,
-          email: email,
-          initials: initials,
-          status: "available",
-        });
-
-        router.push("/");
-      }
+      } else setError("Unable to reach the authentication service. Please try again.");
       setLoading(false);
     }
   }
 
   function handleSocialLogin(provider: string) {
-    setLoading(true);
-    setTimeout(() => {
-      saveUser({
-        id: `user-${provider}-${Date.now()}`,
-        name: `${provider} User`,
-        email: `user@${provider.toLowerCase()}.com`,
-        initials: provider.slice(0, 2).toUpperCase(),
-        status: "available",
-      });
-      setLoading(false);
-      router.push("/");
-    }, 600);
+    setError(`${provider} sign-in is not configured yet. Use email and password.`);
   }
 
   return (
@@ -105,12 +72,12 @@ export default function LoginPage() {
         </Link>
 
         <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-[#64748b]">
-          <span>New to Zoom?</span>
+          <span>New user?</span>
           <Link
             href="/signup"
             className="font-bold text-[#0e72ed] hover:text-[#0c63ce] hover:underline transition"
           >
-            Sign Up Free
+            Sign Up
           </Link>
         </div>
       </header>
@@ -209,6 +176,13 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+
+          <p className="mt-4 text-center text-xs text-[#64748b]">
+            New user?{" "}
+            <Link href="/signup" className="font-bold text-[#0e72ed] hover:underline">
+              Create an account
+            </Link>
+          </p>
 
           {/* Or Divider */}
           <div className="relative my-6 text-center">

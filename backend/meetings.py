@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
+from auth import get_current_user
 from models import Meeting, MeetingStatus, Participant, ParticipantRole, User
 
 router = APIRouter(prefix="/meetings", tags=["meetings"])
@@ -113,9 +114,8 @@ def get_meeting_or_404(db: Session, code: str) -> Meeting:
 
 
 def create_meeting(
-    db: Session, payload: MeetingCreate, meeting_status: MeetingStatus
+    db: Session, payload: MeetingCreate, meeting_status: MeetingStatus, host: User
 ) -> Meeting:
-    host = get_host_user(db, payload.host_id, payload.host_email)
     meeting = Meeting(
         meeting_code=generate_unique_meeting_code(db),
         title=payload.title,
@@ -143,22 +143,28 @@ def create_meeting(
 
 @router.post("/instant", response_model=MeetingResponse, status_code=201)
 def create_instant_meeting(
-    payload: MeetingCreate = MeetingCreate(), db: Session = Depends(get_db)
+    payload: MeetingCreate = MeetingCreate(),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> Meeting:
-    """Only logged in users can create an instant meeting."""
-    return create_meeting(db, payload, MeetingStatus.LIVE)
+    return create_meeting(db, payload, MeetingStatus.LIVE, current_user)
 
 
 @router.post("/schedule", response_model=MeetingResponse, status_code=201)
-def schedule_meeting(payload: MeetingCreate, db: Session = Depends(get_db)) -> Meeting:
-    """Only logged in users can schedule a meeting."""
+def schedule_meeting(
+    payload: MeetingCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Meeting:
     if payload.scheduled_start is None:
         raise HTTPException(status_code=422, detail="scheduled_start is required")
-    return create_meeting(db, payload, MeetingStatus.SCHEDULED)
+    return create_meeting(db, payload, MeetingStatus.SCHEDULED, current_user)
 
 
 @router.get("/upcoming", response_model=list[MeetingResponse])
-def list_upcoming_meetings(db: Session = Depends(get_db)) -> list[Meeting]:
+def list_upcoming_meetings(
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+) -> list[Meeting]:
     now = datetime.now(UTC).replace(tzinfo=None)
     return list(
         db.scalars(
@@ -167,6 +173,7 @@ def list_upcoming_meetings(db: Session = Depends(get_db)) -> list[Meeting]:
             .where(
                 Meeting.status == MeetingStatus.SCHEDULED,
                 Meeting.scheduled_start >= now,
+                Meeting.host_id == current_user.id,
             )
             .order_by(Meeting.scheduled_start)
         ).all()
@@ -174,12 +181,14 @@ def list_upcoming_meetings(db: Session = Depends(get_db)) -> list[Meeting]:
 
 
 @router.get("/recent", response_model=list[MeetingResponse])
-def list_recent_meetings(db: Session = Depends(get_db)) -> list[Meeting]:
+def list_recent_meetings(
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+) -> list[Meeting]:
     return list(
         db.scalars(
             select(Meeting)
             .options(selectinload(Meeting.participants))
-            .where(Meeting.status == MeetingStatus.ENDED)
+            .where(Meeting.status == MeetingStatus.ENDED, Meeting.host_id == current_user.id)
             .order_by(Meeting.scheduled_start.desc())
         ).all()
     )

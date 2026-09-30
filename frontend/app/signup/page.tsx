@@ -43,6 +43,7 @@ export default function SignUpPage() {
         email: res.email,
         initials: initials,
         status: "available",
+        token: res.token,
       });
 
       setLoading(false);
@@ -50,34 +51,13 @@ export default function SignUpPage() {
     } catch (err) {
       if (err instanceof ApiError && err.detail) {
         setError(err.detail);
-      } else {
-        const initials = (firstName[0] + (lastName[0] || "")).toUpperCase();
-        saveUser({
-          id: `user-${Date.now()}`,
-          name: fullName,
-          email: email,
-          initials: initials,
-          status: "available",
-        });
-        router.push("/");
-      }
+      } else setError("Unable to reach the authentication service. Please try again.");
       setLoading(false);
     }
   }
 
   function handleSocialSignUp(provider: string) {
-    setLoading(true);
-    setTimeout(() => {
-      saveUser({
-        id: `user-${provider}-${Date.now()}`,
-        name: `${provider} Member`,
-        email: `member@${provider.toLowerCase()}.com`,
-        initials: provider.slice(0, 2).toUpperCase(),
-        status: "available",
-      });
-      setLoading(false);
-      router.push("/");
-    }, 600);
+    setError(`${provider} sign-up is not configured yet. Use email and password.`);
   }
 
   return (
@@ -99,7 +79,7 @@ export default function SignUpPage() {
             href="/login"
             className="font-bold text-[#0e72ed] hover:text-[#0c63ce] hover:underline transition"
           >
-            Sign In
+            Log In
           </Link>
         </div>
       </header>
@@ -252,6 +232,13 @@ export default function SignUpPage() {
                 )}
               </button>
             </form>
+
+            <p className="mt-4 text-center text-xs text-[#64748b]">
+              Already have an account?{" "}
+              <Link href="/login" className="font-bold text-[#0e72ed] hover:underline">
+                Log in
+              </Link>
+            </p>
 
             {/* Or Divider */}
             <div className="relative my-5 text-center">

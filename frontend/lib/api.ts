@@ -52,6 +52,8 @@ export type ParticipantList = {
   participants: Participant[];
 };
 
+import { getAuthToken } from "./auth";
+
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8005";
 
 export class ApiError extends Error {
@@ -67,10 +69,12 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getAuthToken();
   const response = await fetch(`${apiUrl}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
   });

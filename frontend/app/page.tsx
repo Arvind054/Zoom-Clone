@@ -21,6 +21,7 @@ import { AppShell } from "./components/app-shell";
 import { JoinModal } from "./components/join-modal";
 import { ScheduleModal } from "./components/schedule-modal";
 import { ShareModal } from "./components/share-modal";
+import { getStoredUser } from "../lib/auth";
 import {
   createInstantMeeting,
   getUpcomingMeetings,
@@ -47,6 +48,7 @@ export default function Home() {
   const [creating, setCreating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
 
   // New Meeting options dropdown
   const [newMeetingDropdownOpen, setNewMeetingDropdownOpen] = useState(false);
@@ -106,8 +108,21 @@ export default function Home() {
   };
 
   useEffect(() => {
-    void fetchMeetingsData();
-  }, []);
+    if (!getStoredUser()) {
+      router.replace("/login");
+      return;
+    }
+    const readyTimer = window.setTimeout(() => setAuthReady(true), 0);
+    return () => window.clearTimeout(readyTimer);
+  }, [router]);
+
+  useEffect(() => {
+    if (!authReady) return;
+    const meetingsTimer = window.setTimeout(() => void fetchMeetingsData(), 0);
+    return () => window.clearTimeout(meetingsTimer);
+  }, [authReady]);
+
+  if (!authReady) return null;
 
   async function handleNewMeeting() {
     setActionError(null);
@@ -117,12 +132,8 @@ export default function Home() {
     try {
       const meeting = await createInstantMeeting();
       router.push(`/meeting/${meeting.meeting_code}?video=${startWithVideo}`);
-    } catch {
-      // Fallback: instant room code generator so app works without backend
-      const randomCode = `${Math.floor(100 + Math.random() * 900)}-${Math.floor(
-        100 + Math.random() * 900
-      )}-${Math.floor(1000 + Math.random() * 9000)}`;
-      router.push(`/meeting/${randomCode}?video=${startWithVideo}`);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Could not start the meeting.");
     } finally {
       setCreating(false);
     }
