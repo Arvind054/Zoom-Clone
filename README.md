@@ -2,6 +2,17 @@
 
 A Zoom-inspired meeting application with account authentication, instant meetings, scheduled meetings, invite-link joining, participant presence, recent meetings, and browser camera/microphone controls.
 
+## Live Demo
+
+The project is live at [https://zoom-clone-kappa-sandy.vercel.app/](https://zoom-clone-kappa-sandy.vercel.app/).
+
+Create your own account, or use the seeded user data:
+
+```text
+Email:    testuser@gmail.com
+Password: testpassword
+```
+
 ## Tech Stack
 
 - **Frontend:** Next.js 16, React 19, TypeScript, Tailwind CSS, Lucide icons
