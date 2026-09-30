@@ -1,6 +1,13 @@
 export type MeetingStatus = "scheduled" | "live" | "ended";
 export type ParticipantRole = "host" | "participant";
 
+export type UserResponse = {
+  id: number;
+  display_name: string;
+  email: string;
+  token: string;
+};
+
 export type Participant = {
   id: number;
   display_name: string;
@@ -27,6 +34,8 @@ export type MeetingInput = {
   title?: string;
   description?: string | null;
   duration_min?: number;
+  host_id?: number;
+  host_email?: string;
 };
 
 export type ScheduleMeetingInput = MeetingInput & {
@@ -36,21 +45,24 @@ export type ScheduleMeetingInput = MeetingInput & {
 
 export type JoinMeetingInput = {
   display_name: string;
+  user_id?: number;
 };
 
 export type ParticipantList = {
   participants: Participant[];
 };
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8005";
 
 export class ApiError extends Error {
   status: number;
+  detail?: string;
 
-  constructor(status: number) {
-    super(`API returned ${status}`);
+  constructor(status: number, detail?: string) {
+    super(detail || `API returned ${status}`);
     this.name = "ApiError";
     this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -64,12 +76,39 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new ApiError(response.status);
+    let detailMessage = "";
+    try {
+      const errData = await response.json();
+      detailMessage = errData.detail || errData.message || "";
+    } catch {
+      // json parse failed
+    }
+    throw new ApiError(response.status, detailMessage);
   }
 
   return (await response.json()) as T;
 }
 
+/* Authentication APIs */
+export function signupApi(data: { name: string; email: string; password: string }): Promise<UserResponse> {
+  return request<UserResponse>("/auth/signup", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function loginApi(data: { email: string; password: string }): Promise<UserResponse> {
+  return request<UserResponse>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function getMeApi(userId: number): Promise<UserResponse> {
+  return request<UserResponse>(`/auth/me?user_id=${userId}`);
+}
+
+/* Meetings APIs */
 export function createInstantMeeting(input: MeetingInput = {}): Promise<Meeting> {
   return request<Meeting>("/meetings/instant", {
     method: "POST",

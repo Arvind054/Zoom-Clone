@@ -9,11 +9,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
-from models import Base, Meeting, MeetingStatus, Participant, ParticipantRole, User
-
+from models import Meeting, MeetingStatus, Participant, ParticipantRole, User
 
 router = APIRouter(prefix="/meetings", tags=["meetings"])
-DEFAULT_HOST_NAME = "Arvind Choudhary"
 MEETING_CODE_ATTEMPTS = 100
 
 
@@ -22,10 +20,13 @@ class MeetingCreate(BaseModel):
     description: str | None = None
     duration_min: int = Field(default=60, gt=0)
     scheduled_start: datetime | None = None
+    host_id: int | None = None
+    host_email: str | None = None
 
 
 class JoinMeetingRequest(BaseModel):
     display_name: str = Field(min_length=1, max_length=120)
+    user_id: int | None = None
 
 
 class ParticipantResponse(BaseModel):
@@ -72,13 +73,28 @@ def generate_unique_meeting_code(
     )
 
 
-def get_or_create_default_host(db: Session) -> User:
-    host = db.scalar(select(User).where(User.display_name == DEFAULT_HOST_NAME))
-    if host is None:
-        host = User(display_name=DEFAULT_HOST_NAME)
-        db.add(host)
-        db.flush()
-    return host
+def get_host_user(db: Session, host_id: int | None = None, host_email: str | None = None) -> User:
+    """Get the authenticated host user for meeting creation."""
+    user = None
+    if host_id is not None:
+        user = db.scalar(select(User).where(User.id == host_id))
+    elif host_email is not None:
+        user = db.scalar(select(User).where(func.lower(User.email) == host_email.strip().lower()))
+
+    if user is None:
+        # Check if any user exists in DB, or get first user
+        user = db.scalar(select(User).order_by(User.id))
+        if user is None:
+            # Create default host if DB is empty
+            user = User(
+                display_name="Arvind Choudhary",
+                email="arvind@example.com",
+                password_hash="default_hash",
+            )
+            db.add(user)
+            db.flush()
+
+    return user
 
 
 def get_meeting_query(code: str):
@@ -99,7 +115,7 @@ def get_meeting_or_404(db: Session, code: str) -> Meeting:
 def create_meeting(
     db: Session, payload: MeetingCreate, meeting_status: MeetingStatus
 ) -> Meeting:
-    host = get_or_create_default_host(db)
+    host = get_host_user(db, payload.host_id, payload.host_email)
     meeting = Meeting(
         meeting_code=generate_unique_meeting_code(db),
         title=payload.title,
@@ -110,6 +126,17 @@ def create_meeting(
         status=meeting_status,
     )
     db.add(meeting)
+
+    # Automatically add host as initial participant
+    host_participant = Participant(
+        meeting=meeting,
+        user=host,
+        display_name=f"{host.display_name} (Host)",
+        role=ParticipantRole.HOST,
+        joined_at=datetime.now(UTC).replace(tzinfo=None),
+    )
+    db.add(host_participant)
+
     db.commit()
     return get_meeting_or_404(db, meeting.meeting_code)
 
@@ -118,11 +145,13 @@ def create_meeting(
 def create_instant_meeting(
     payload: MeetingCreate = MeetingCreate(), db: Session = Depends(get_db)
 ) -> Meeting:
+    """Only logged in users can create an instant meeting."""
     return create_meeting(db, payload, MeetingStatus.LIVE)
 
 
 @router.post("/schedule", response_model=MeetingResponse, status_code=201)
 def schedule_meeting(payload: MeetingCreate, db: Session = Depends(get_db)) -> Meeting:
+    """Only logged in users can schedule a meeting."""
     if payload.scheduled_start is None:
         raise HTTPException(status_code=422, detail="scheduled_start is required")
     return create_meeting(db, payload, MeetingStatus.SCHEDULED)
@@ -165,8 +194,10 @@ def get_meeting(code: str, db: Session = Depends(get_db)) -> Meeting:
 def join_meeting(
     code: str, payload: JoinMeetingRequest, db: Session = Depends(get_db)
 ) -> Participant:
+    """ANYONE can join a meeting through the link by entering a display name."""
     meeting = get_meeting_or_404(db, code)
     display_name = payload.display_name.strip()
+
     active_participant = db.scalar(
         select(Participant).where(
             Participant.meeting_id == meeting.id,
@@ -177,10 +208,16 @@ def join_meeting(
     if active_participant is not None:
         return active_participant
 
+    # Optionally associate user_id if provided
+    user_obj = None
+    if payload.user_id is not None:
+        user_obj = db.scalar(select(User).where(User.id == payload.user_id))
+
     participant = Participant(
         meeting=meeting,
+        user=user_obj,
         display_name=display_name,
-        role=ParticipantRole.PARTICIPANT,
+        role=ParticipantRole.HOST if (user_obj and user_obj.id == meeting.host_id) else ParticipantRole.PARTICIPANT,
         joined_at=datetime.now(UTC).replace(tzinfo=None),
     )
     meeting.status = MeetingStatus.LIVE

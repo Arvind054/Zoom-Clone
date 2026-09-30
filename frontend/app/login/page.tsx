@@ -3,8 +3,9 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, KeyRound, LoaderCircle, ArrowRight, Check } from "lucide-react";
+import { Eye, EyeOff, KeyRound, LoaderCircle, ArrowRight } from "lucide-react";
 import { saveUser } from "../../lib/auth";
+import { loginApi, ApiError } from "../../lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,7 +16,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function handleLogin(e: FormEvent) {
+  async function handleLogin(e: FormEvent) {
     e.preventDefault();
     if (!email || !password) {
       setError("Please enter both email and password.");
@@ -24,15 +25,9 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
 
-    setTimeout(() => {
-      // Extract display name from email or default
-      const username = email.split("@")[0] || "User";
-      const formattedName = username
-        .split(/[._-]/)
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(" ");
-
-      const initials = formattedName
+    try {
+      const res = await loginApi({ email, password });
+      const initials = res.display_name
         .split(" ")
         .map((n) => n[0])
         .join("")
@@ -40,16 +35,45 @@ export default function LoginPage() {
         .toUpperCase() || "Z";
 
       saveUser({
-        id: `user-${Date.now()}`,
-        name: formattedName,
-        email: email,
+        id: String(res.id),
+        name: res.display_name,
+        email: res.email,
         initials: initials,
         status: "available",
       });
 
       setLoading(false);
       router.push("/");
-    }, 800);
+    } catch (err) {
+      // Fallback for demo if backend is offline or returns error
+      if (err instanceof ApiError && err.detail) {
+        setError(err.detail);
+      } else {
+        const username = email.split("@")[0] || "User";
+        const formattedName = username
+          .split(/[._-]/)
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+          .join(" ");
+
+        const initials = formattedName
+          .split(" ")
+          .map((n) => n[0])
+          .join("")
+          .slice(0, 2)
+          .toUpperCase() || "Z";
+
+        saveUser({
+          id: `user-${Date.now()}`,
+          name: formattedName,
+          email: email,
+          initials: initials,
+          status: "available",
+        });
+
+        router.push("/");
+      }
+      setLoading(false);
+    }
   }
 
   function handleSocialLogin(provider: string) {
@@ -199,10 +223,10 @@ export default function LoginPage() {
           {/* Social / SSO Logins */}
           <div className="space-y-2.5">
             <button
-             disabled = {true}
+              disabled={true}
               type="button"
               onClick={() => handleSocialLogin("SSO")}
-              className="w-full py-2.5 px-4 rounded-xl border border-[#cbd5e1] hover:bg-[#f8fafc] text-xs font-semibold text-[#334155] flex items-center justify-center gap-2.5 transition"
+              className="w-full py-2.5 px-4 rounded-xl border border-[#cbd5e1] hover:bg-[#f8fafc] text-xs font-semibold text-[#334155] flex items-center justify-center gap-2.5 transition opacity-50 cursor-not-allowed"
             >
               <KeyRound size={16} className="text-[#0e72ed]" />
               <span>Sign in with SSO</span>
@@ -210,10 +234,10 @@ export default function LoginPage() {
 
             <div className="grid grid-cols-3 gap-2">
               <button
-              disabled = {true}
+                disabled={true}
                 type="button"
                 onClick={() => handleSocialLogin("Google")}
-                className="py-2.5 px-3 rounded-xl border border-[#cbd5e1] hover:bg-[#f8fafc] text-xs font-semibold text-[#334155] flex items-center justify-center gap-2 transition"
+                className="py-2.5 px-3 rounded-xl border border-[#cbd5e1] hover:bg-[#f8fafc] text-xs font-semibold text-[#334155] flex items-center justify-center gap-2 transition opacity-50 cursor-not-allowed"
                 title="Google"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24">
@@ -238,10 +262,10 @@ export default function LoginPage() {
               </button>
 
               <button
-              disabled = {true}
+                disabled={true}
                 type="button"
                 onClick={() => handleSocialLogin("Apple")}
-                className="py-2.5 px-3 rounded-xl border border-[#cbd5e1] hover:bg-[#f8fafc] text-xs font-semibold text-[#334155] flex items-center justify-center gap-2 transition"
+                className="py-2.5 px-3 rounded-xl border border-[#cbd5e1] hover:bg-[#f8fafc] text-xs font-semibold text-[#334155] flex items-center justify-center gap-2 transition opacity-50 cursor-not-allowed"
                 title="Apple"
               >
                 <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
@@ -251,10 +275,10 @@ export default function LoginPage() {
               </button>
 
               <button
-              disabled = {true}
+                disabled={true}
                 type="button"
                 onClick={() => handleSocialLogin("Facebook")}
-                className="py-2.5 px-3 rounded-xl border border-[#cbd5e1] hover:bg-[#f8fafc] text-xs font-semibold text-[#334155] flex items-center justify-center gap-2 transition"
+                className="py-2.5 px-3 rounded-xl border border-[#cbd5e1] hover:bg-[#f8fafc] text-xs font-semibold text-[#334155] flex items-center justify-center gap-2 transition opacity-50 cursor-not-allowed"
                 title="Facebook"
               >
                 <svg className="w-4 h-4 fill-[#1877F2]" viewBox="0 0 24 24">
