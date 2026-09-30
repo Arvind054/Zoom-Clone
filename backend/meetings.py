@@ -240,6 +240,11 @@ def join_meeting(
 ) -> Participant:
     """ANYONE can join a meeting through the link by entering a display name."""
     meeting = get_meeting_or_404(db, code)
+    if meeting.status == MeetingStatus.ENDED:
+        raise HTTPException(
+            status_code=404,
+            detail="Meeting does not exist or has ended",
+        )
     display_name = payload.display_name.strip()
 
     user_obj = None

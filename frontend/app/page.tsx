@@ -32,6 +32,11 @@ import {
 
 type LoadState = "loading" | "ready" | "error";
 
+function parseMeetingDate(value: string) {
+  const hasTimezone = value.endsWith("Z") || /[+-]\d{2}:?\d{2}$/.test(value);
+  return new Date(hasTimezone ? value : `${value}Z`);
+}
+
 export default function Home() {
   const router = useRouter();
   const [currentTime, setCurrentTime] = useState<string>("");
@@ -136,7 +141,7 @@ export default function Home() {
 
   const visibleUpcomingMeetings = upcoming.filter(
     (meeting) =>
-      !meeting.scheduled_start || new Date(meeting.scheduled_start).getTime() > nowMs
+      !meeting.scheduled_start || parseMeetingDate(meeting.scheduled_start).getTime() > nowMs
   );
   const visibleRecentMeetings = showAllRecent ? recent : recent.slice(0, 2);
 
@@ -159,10 +164,10 @@ export default function Home() {
     setUpcoming((current) =>
       [...current.filter((item) => item.id !== meeting.id), meeting].sort((first, second) => {
         const firstTime = first.scheduled_start
-          ? new Date(first.scheduled_start).getTime()
+          ? parseMeetingDate(first.scheduled_start).getTime()
           : Number.MAX_SAFE_INTEGER;
         const secondTime = second.scheduled_start
-          ? new Date(second.scheduled_start).getTime()
+          ? parseMeetingDate(second.scheduled_start).getTime()
           : Number.MAX_SAFE_INTEGER;
         return firstTime - secondTime;
       })
@@ -243,7 +248,7 @@ export default function Home() {
                             <div className="flex items-center gap-2 mb-1">
                               <span className="text-xs font-bold text-[#0e72ed] bg-[#e8f2ff] px-2 py-0.5 rounded-md">
                                 {meeting.scheduled_start
-                                  ? new Date(meeting.scheduled_start).toLocaleTimeString([], {
+                                  ? parseMeetingDate(meeting.scheduled_start).toLocaleTimeString([], {
                                       hour: "2-digit",
                                       minute: "2-digit",
                                     })

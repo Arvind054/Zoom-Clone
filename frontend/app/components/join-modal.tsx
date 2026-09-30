@@ -38,7 +38,11 @@ export function JoinModal({ open, onClose }: JoinModalProps) {
     setError(null);
     setSubmitting(true);
     try {
-      await getMeeting(code);
+      const meeting = await getMeeting(code);
+      if (meeting.status === "ended") {
+        setError("That meeting has ended. Check the ID or invite link and try again.");
+        return;
+      }
       const user = getStoredUser();
       await joinMeeting(code, {
         display_name: displayName.trim(),
