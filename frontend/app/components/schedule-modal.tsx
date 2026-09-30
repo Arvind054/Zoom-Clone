@@ -42,6 +42,12 @@ export function ScheduleModal({ open, onClose, onCreated }: ScheduleModalProps) 
     event.preventDefault();
     if (!title.trim() || !date || !time) return;
 
+    const scheduledStart = new Date(`${date}T${time}:00`);
+    if (scheduledStart <= new Date()) {
+      setError("Choose a future date and time.");
+      return;
+    }
+
     setError(null);
     setSubmitting(true);
     try {
@@ -49,7 +55,7 @@ export function ScheduleModal({ open, onClose, onCreated }: ScheduleModalProps) 
         title: title.trim(),
         description: description.trim() || null,
         duration_min: Number(duration),
-        scheduled_start: `${date}T${time}:00`,
+        scheduled_start: scheduledStart.toISOString(),
       });
       onCreated(meeting);
       setInviteLink(`${window.location.origin}/meeting/${meeting.meeting_code}`);

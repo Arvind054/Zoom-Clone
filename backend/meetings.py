@@ -128,18 +128,35 @@ def create_meeting(
     )
     db.add(meeting)
 
-    # Automatically add host as initial participant
-    host_participant = Participant(
-        meeting=meeting,
-        user=host,
-        display_name=f"{host.display_name} (Host)",
-        role=ParticipantRole.HOST,
-        joined_at=datetime.now(UTC).replace(tzinfo=None),
-    )
-    db.add(host_participant)
+    if meeting_status == MeetingStatus.LIVE:
+        host_participant = Participant(
+            meeting=meeting,
+            user=host,
+            display_name=host.display_name,
+            role=ParticipantRole.HOST,
+            joined_at=datetime.now(UTC).replace(tzinfo=None),
+        )
+        db.add(host_participant)
 
     db.commit()
     return get_meeting_or_404(db, meeting.meeting_code)
+
+
+def mark_completed_meetings(db: Session, now: datetime) -> None:
+    """Close scheduled meetings once their scheduled start has passed."""
+    meetings = db.scalars(
+        select(Meeting).where(
+            Meeting.status == MeetingStatus.SCHEDULED,
+            Meeting.scheduled_start.is_not(None),
+        )
+    ).all()
+    changed = False
+    for meeting in meetings:
+        if meeting.scheduled_start is not None and meeting.scheduled_start <= now:
+            meeting.status = MeetingStatus.ENDED
+            changed = True
+    if changed:
+        db.commit()
 
 
 @router.post("/instant", response_model=MeetingResponse, status_code=201)
@@ -159,6 +176,16 @@ def schedule_meeting(
 ) -> Meeting:
     if payload.scheduled_start is None:
         raise HTTPException(status_code=422, detail="scheduled_start is required")
+    now = datetime.now(UTC).replace(tzinfo=None)
+    scheduled_start = payload.scheduled_start
+    if scheduled_start.tzinfo is not None:
+        scheduled_start = scheduled_start.astimezone(UTC).replace(tzinfo=None)
+    if scheduled_start <= now:
+        raise HTTPException(
+            status_code=422,
+            detail="scheduled_start must be in the future",
+        )
+    payload.scheduled_start = scheduled_start
     return create_meeting(db, payload, MeetingStatus.SCHEDULED, current_user)
 
 
@@ -167,6 +194,7 @@ def list_upcoming_meetings(
     db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ) -> list[Meeting]:
     now = datetime.now(UTC).replace(tzinfo=None)
+    mark_completed_meetings(db, now)
     return list(
         db.scalars(
             select(Meeting)
@@ -185,6 +213,7 @@ def list_upcoming_meetings(
 def list_recent_meetings(
     db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ) -> list[Meeting]:
+    mark_completed_meetings(db, datetime.now(UTC).replace(tzinfo=None))
     return list(
         db.scalars(
             select(Meeting)

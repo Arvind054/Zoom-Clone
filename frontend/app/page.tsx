@@ -36,6 +36,7 @@ export default function Home() {
   const router = useRouter();
   const [currentTime, setCurrentTime] = useState<string>("");
   const [currentDate, setCurrentDate] = useState<string>("");
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const [upcoming, setUpcoming] = useState<Meeting[]>([]);
   const [recent, setRecent] = useState<Meeting[]>([]);
@@ -61,6 +62,7 @@ export default function Home() {
   useEffect(() => {
     function updateClock() {
       const now = new Date();
+      setNowMs(now.getTime());
       // Time format e.g. "11:17 AM"
       const timeStr = now.toLocaleTimeString("en-US", {
         hour: "numeric",
@@ -124,8 +126,18 @@ export default function Home() {
     return () => window.clearTimeout(meetingsTimer);
   }, [authReady]);
 
+  useEffect(() => {
+    if (!authReady) return;
+    const refreshTimer = window.setInterval(() => void fetchMeetingsData(), 30_000);
+    return () => window.clearInterval(refreshTimer);
+  }, [authReady]);
+
   if (!authReady) return null;
 
+  const visibleUpcomingMeetings = upcoming.filter(
+    (meeting) =>
+      !meeting.scheduled_start || new Date(meeting.scheduled_start).getTime() > nowMs
+  );
   const visibleRecentMeetings = showAllRecent ? recent : recent.slice(0, 2);
 
   async function handleNewMeeting() {
@@ -179,7 +191,7 @@ export default function Home() {
                 </div>
 
                 {/* Upcoming Meetings Container */}
-                {upcoming.length === 0 ? (
+                {visibleUpcomingMeetings.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 text-center">
                     <div className="flex items-center gap-1.5 text-[#64748b] text-base font-medium mb-6">
                       <span>No upcoming meetings</span>
@@ -210,7 +222,7 @@ export default function Home() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between mb-2">
                       <h2 className="text-xs font-bold uppercase tracking-wider text-[#64748b]">
-                        Upcoming Meetings ({upcoming.length})
+                        Upcoming Meetings ({visibleUpcomingMeetings.length})
                       </h2>
                       <button
                         type="button"
@@ -222,7 +234,7 @@ export default function Home() {
                     </div>
 
                     <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
-                      {upcoming.map((meeting) => (
+                      {visibleUpcomingMeetings.map((meeting) => (
                         <div
                           key={meeting.id}
                           className="p-4 rounded-2xl border border-[#e2e8f0] bg-[#f8fafc] hover:bg-white hover:border-[#0e72ed]/40 hover:shadow-md transition flex items-center justify-between group"

@@ -9,12 +9,13 @@ type MeetingCardProps = {
 
 function formatMeetingTime(value: string | null) {
   if (!value) return "Time to be confirmed";
+  const hasTimezone = value.endsWith("Z") || /[+-]\d{2}:?\d{2}$/.test(value);
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  }).format(new Date(value));
+  }).format(new Date(hasTimezone ? value : `${value}Z`));
 }
 
 export function MeetingCard({ meeting, recent = false }: MeetingCardProps) {
